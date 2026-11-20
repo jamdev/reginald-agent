@@ -1,0 +1,10 @@
+[Unit]
+Description=reginald timer: key-dates-digest
+
+[Timer]
+OnCalendar=Mon 09:30
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

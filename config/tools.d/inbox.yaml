@@ -1,0 +1,2 @@
+command: "{python}"
+args: [-I, -m, reginald.services.inbox, "{vault_path}"]

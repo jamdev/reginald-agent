@@ -1,0 +1,10 @@
+[Unit]
+Description=reginald timer: update-trackers
+
+[Timer]
+OnCalendar=Mon 08:30
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,68 @@
+# Copy config/base.yaml-example to config/base.yaml to initialise shared settings.
+# Reginald reads base.yaml first, then automatically loads every
+# .yaml and .yml file directly inside tools.d/ and tasks.d/. The filename supplies the name.
+# dev.yaml or prod.yaml is applied last. Mappings merge by key. A list override replaces the whole list.
+
+vault_path: ~/vaults/agentic-gc          # override per environment
+db_path: ~/.local/share/reginald/reginald.db
+
+git:
+  commit_per_run: true
+  push: true
+  remote: origin
+  branch: main
+  # Passed to git on every invocation. The service user has no ~/.gitconfig,
+  # and git's own fallback is not dependable — on the server it derived
+  # 'reginald@ubuntu.(none)' and refused to commit. Point author_email at a
+  # real address if you want the commits attributed on GitHub.
+  author_name: Reginald
+  author_email: reginald@localhost
+
+# Reginald's place in a multi-author vault. Contributors (humans and, later,
+# other agents) commit under their own git identities; Reginald is classified
+# by matching git.author_email. `handle` is the @name a callout addresses —
+# `> [!todo] @reginald ...` — and unaddressed [!todo]/[!question] items also
+# default to Reginald, since it is the resident agent.
+identity:
+  handle: reginald
+
+site:
+  enabled: true
+  ob_binary: ob                          # obsidian-headless CLI
+  extra_args: []
+  # Public address of the published vault. Digest emails link each note here:
+  # <base_url>/<vault path without .md>. Leave empty to send unlinked titles.
+  base_url: https://add.your.url.here
+
+email:
+  provider: postmark                     # postmark | console
+  from_address: reginald@add.your.domain.here    # must be a verified Postmark sender
+  message_stream: broadcast
+  reply_to: null
+  allowlist: []                          # empty = no restriction (prod); dev sets operator only
+
+logfire:
+  enabled: false
+  environment: dev
+  # The project lives on Logfire's EU region. $LOGFIRE_TOKEN (in /etc/reginald/env)
+  # must be a write token for that same instance, or configure() fails and every
+  # span/log silently no-ops.
+  base_url: https://logfire-eu.pydantic.dev
+
+# Console/journal logging. Set REGINALD_LOG_LEVEL in /etc/reginald/env to
+# override the level from the host's YAML settings.
+logging:
+  level: INFO                            # DEBUG | INFO | WARNING | ERROR
+  agent_turns: true                      # one line per agent tool call
+
+# Custom tasks without a prompt_file read <task-key>.md from this vault directory.
+prompts:
+  prompts_dir: Setup/Tasks
+  # How many fresh UUIDv4s to inject into each rendered prompt, so the agent
+  # (which has no shell) never burns turns generating one. action-edits sizes
+  # its pool to the manifest instead; the `backfill-uuids` post-step fills any
+  # note the agent missed, so this is a tuning knob, not a hard limit.
+  uuid_pool_size: 25
+
+budget:
+  monthly_limit_usd: 100.0               # orchestrator refuses new runs past this

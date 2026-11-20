@@ -1,0 +1,12 @@
+[Unit]
+Description=reginald timer: action-edits
+
+[Timer]
+# Every day, including weekends — contributors leave notes at any time, and a
+# 01:00 run catches the previous day's edits. Skip-empty makes a quiet day free.
+OnCalendar=*-*-* 01:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

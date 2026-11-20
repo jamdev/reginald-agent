@@ -1,0 +1,19 @@
+# Host settings are copied from the tracked *.yaml-example templates (docs/INSTALL.md).
+/config/base.yaml
+/config/dev.yaml
+/config/prod.yaml
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+dist/
+build/
+*.db
+*.db-*
+.pytest_cache/
+.ruff_cache/
+.env
+.DS_Store
+.claude/settings.local.json
+vault/
+vault.def/

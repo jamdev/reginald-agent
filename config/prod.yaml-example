@@ -1,0 +1,23 @@
+# Copy config/prod.yaml-example to config/prod.yaml to initialise production settings.
+# Production overlay (Raspberry Pi, Ubuntu Server 26.04 LTS).
+# In prod, Reginald loads prod.yaml after base.yaml and all YAML definitions in tools.d/ and tasks.d/.
+# Override individual fields under tools.<filename stem> or tasks.<filename stem>.
+# For example, tools: {brave-search: {command: /usr/bin/npx}} changes only its command in prod.
+# An override of a list such as a tool's args replaces the entire list.
+
+vault_path: /srv/vault/agentic-gc
+db_path: /var/lib/reginald/reginald.db
+
+git:
+  push: true
+
+site:
+  enabled: true
+
+email:
+  provider: postmark
+  allowlist: []
+
+logfire:
+  enabled: true
+  environment: prod

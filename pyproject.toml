@@ -1,0 +1,64 @@
+[project]
+name = "reginald"
+version = "1.0.0"
+description = "Headless orchestrator for a know-how vault: scheduled agent runs, content-event outbox, per-topic subscriber emails, site publication."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+dependencies = [
+    "typer>=0.12",
+    "pydantic[email]>=2.7",
+    "pydantic-settings>=2.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+agents = [
+    "claude-agent-sdk>=0.1",
+    "mcp>=1.29,<2",
+    "openai-codex>=0.170.0",
+    "pydantic-ai>=2.26",
+]
+observability = [
+    "genai-prices>=0.1.1",
+    "logfire>=3.0",
+]
+
+# Tooling, not a runtime extra: uv installs this group by default for local work
+# and the deploy scripts exclude it with --no-default-groups.
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+reginald = "reginald.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reginald"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+# Selected explicitly rather than inheriting ruff's defaults: those widen between
+# releases, and an upgrade should not silently change what `make lint` enforces.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "UP", "DTZ", "BLE", "PLW"]
+
+[tool.ruff.lint.flake8-bugbear]
+# typer.Option()/Argument() in defaults is the documented Typer idiom, not the
+# mutable-default bug B008 exists to catch.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]

@@ -1,0 +1,33 @@
+Reginald — regulatory update
+============================
+{% if digest.escalations %}
+Escalations
+-----------
+{% for item in digest.escalations %}
+* {% if item.number %}ESC-{{ "%03d"|format(item.number) }} — {% endif %}{{ item.title }}
+  {% if item.topics %}[{{ item.topics|join(" · ") }}]{% endif %}{% if item.priority %} priority: {{ item.priority }}{% endif %}{% if item.raised_by %} — raised by {{ item.raised_by }}{% endif %}
+  {{ note_url(item.file_path) or item.file_path }}
+{%- endfor %}
+{% endif %}
+{%- if digest.new %}
+New
+---
+{% for item in digest.new %}
+* {% if item.effective_date %}{{ item.effective_date }} — {% endif %}{{ item.title }}{% if item.jurisdiction %} [{{ item.jurisdiction }}]{% endif %}
+  {% if item.topics %}[{{ item.topics|join(" · ") }}]{% endif %}{% if item.author_kind == "contributor" %} — by {{ item.author_name }}{% endif %}
+  {{ note_url(item.file_path) or item.file_path }}
+{%- endfor %}
+{% endif %}
+{%- if digest.changed %}
+Changed
+-------
+{% for item in digest.changed %}
+* {{ item.title }}{% if item.jurisdiction %} [{{ item.jurisdiction }}]{% endif %}{% if item.edits > 1 %} ({{ item.edits }} edits){% endif %}
+  {% if item.topics %}[{{ item.topics|join(" · ") }}]{% endif %}
+  by {{ item.author_name or "unknown" }}{% if item.summary %} — {{ item.summary }}{% endif %}
+  {{ note_url(item.file_path) or item.file_path }}
+{%- endfor %}
+{% endif %}
+--
+This is an automated digest from Reginald for the Agentic GC knowledge-base
+team (https://the.agenticgc.uk). Do not place reliance on this material.

@@ -1,0 +1,16 @@
+# Reginald discovers this task automatically. Its name is the filename without the extension.
+# Override individual fields under tasks.<name> in dev.yaml or prod.yaml. List overrides replace the whole list.
+title: Action edits
+prompt_file: Setup/Tasks/Action edits.md
+runner: claude-agent
+model: claude-sonnet-5
+tools: [Read, Write, Edit, Glob, Grep, WebFetch, WebSearch, mcp__brave-search__brave_web_search]
+max_turns: 80
+# The pipeline for a multi-author vault. `identify-changes` walks everything that
+# landed on main (events + callout queue) and builds {{MANIFEST}}; with no
+# pending items it skips the agent entirely (a quiet-day run costs nothing).
+# `escalations-sync` repairs the status<->folder invariant. Post-run,
+# `callouts-verify` confirms each item was actually answered, and a final
+# `escalations-sync` moves any newly-resolved escalation into Resolved/.
+pre: [identify-changes, escalations-sync]
+post: [callouts-verify, escalations-sync, normalize-frontmatter, backfill-uuids, set-publish]

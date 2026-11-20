@@ -1,0 +1,13 @@
+[Unit]
+Description=reginald outbox drain
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=reginald
+Group=reginald
+EnvironmentFile=/etc/reginald/env
+Environment=REGINALD_ENV=prod
+WorkingDirectory=/opt/reginald
+ExecStart=/opt/reginald/.venv/bin/reginald outbox drain

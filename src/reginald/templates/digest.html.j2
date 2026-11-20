@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Georgia, serif; color: #222; max-width: 640px; margin: 0 auto; padding: 16px;">
+  <h1 style="font-size: 20px; border-bottom: 2px solid #444; padding-bottom: 8px;">Reginald &mdash; regulatory update</h1>
+
+  {% if digest.escalations %}
+  <h2 style="font-size: 16px; margin-top: 24px; color: #a00;">Escalations</h2>
+  <ul style="padding-left: 20px; margin-top: 4px;">
+    {% for item in digest.escalations %}
+    <li style="margin-bottom: 10px;">
+      {% if item.number %}<strong style="color: #a00;">ESC-{{ "%03d"|format(item.number) }}</strong> &mdash; {% endif %}
+      {% set url = note_url(item.file_path) %}
+      {% if url %}<a href="{{ url }}" style="color: #14507a;">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+      <br><span style="font-size: 13px; color: #666;">
+        {% if item.topics %}{{ item.topics|join(" &middot; ") }}{% endif %}
+        {%- if item.priority %} &middot; priority: {{ item.priority }}{% endif %}
+        {%- if item.raised_by %} &middot; raised by {{ item.raised_by }}{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if digest.new %}
+  <h2 style="font-size: 16px; margin-top: 24px; color: #333;">New</h2>
+  <ul style="padding-left: 20px; margin-top: 4px;">
+    {% for item in digest.new %}
+    <li style="margin-bottom: 10px;">
+      {% if item.effective_date %}<strong>{{ item.effective_date }}</strong> &mdash; {% endif %}
+      {% set url = note_url(item.file_path) %}
+      {% if url %}<a href="{{ url }}" style="color: #14507a;">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+      {% if item.jurisdiction %}<span style="color: #666;">[{{ item.jurisdiction }}]</span>{% endif %}
+      <br><span style="font-size: 13px; color: #666;">
+        {% if item.topics %}{{ item.topics|join(" &middot; ") }}{% endif %}
+        {%- if item.author_kind == "contributor" %} &middot; by {{ item.author_name }}{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if digest.changed %}
+  <h2 style="font-size: 16px; margin-top: 24px; color: #333;">Changed</h2>
+  <ul style="padding-left: 20px; margin-top: 4px;">
+    {% for item in digest.changed %}
+    <li style="margin-bottom: 10px;">
+      {% set url = note_url(item.file_path) %}
+      {% if url %}<a href="{{ url }}" style="color: #14507a;">{{ item.title }}</a>{% else %}{{ item.title }}{% endif %}
+      {% if item.jurisdiction %}<span style="color: #666;">[{{ item.jurisdiction }}]</span>{% endif %}
+      {% if item.edits > 1 %}<span style="color: #888;">({{ item.edits }} edits)</span>{% endif %}
+      <br><span style="font-size: 13px; color: #666;">
+        {% if item.topics %}{{ item.topics|join(" &middot; ") }}<br>{% endif %}
+        by {{ item.author_name or "unknown" }}{% if item.summary %} &mdash; {{ item.summary }}{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <hr style="margin-top: 32px; border: none; border-top: 1px solid #ccc;">
+  <p style="font-size: 12px; color: #888;">
+    This is an automated digest from Reginald for the Agentic GC knowledge-base team
+    (<a href="https://the.agenticgc.uk">the.agenticgc.uk</a>). Do not place reliance on this material.
+  </p>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Reginald discovers this task automatically. Its name is the filename without the extension.
+# Override individual fields under tasks.<name> in dev.yaml or prod.yaml. List overrides replace the whole list.
+
+# Model tiering (cost): tasks that apply genuine research/judgment or feed
+# subscriber email run on claude-sonnet-5; mechanical vault work (classify,
+# extract, file, verify-a-URL) runs on the cheaper claude-haiku-4-5. Haiku is
+# 200K context / 64K output vs Sonnet's 1M/128K — ample for these file-scale
+# tasks, but keep the heavy web-search research on Sonnet.
+title: Research new developments
+prompt_file: Setup/Tasks/Research new developments.md
+runner: claude-agent
+model: claude-sonnet-5
+tools: [Read, Write, Edit, Glob, Grep, Agent, WebFetch, WebSearch, mcp__brave-search__brave_web_search]
+max_turns: 120
+post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

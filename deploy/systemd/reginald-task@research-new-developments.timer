@@ -1,0 +1,10 @@
+[Unit]
+Description=reginald timer: research-new-developments
+
+[Timer]
+OnCalendar=Mon..Fri 09:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

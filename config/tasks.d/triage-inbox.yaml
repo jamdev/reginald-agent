@@ -1,0 +1,9 @@
+# Reginald discovers this task automatically. Its name is the filename without the extension.
+# Override individual fields under tasks.<name> in dev.yaml or prod.yaml. List overrides replace the whole list.
+title: Triage inbox
+prompt_file: Setup/Tasks/Triage inbox.md
+runner: claude-agent
+model: claude-haiku-4-5     # mechanical classification against a fixed taxonomy
+tools: [Read, Write, Edit, Glob, Grep, mcp__inbox__move_file]
+max_turns: 60
+post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

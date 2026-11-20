@@ -1,0 +1,9 @@
+# Reginald discovers this task automatically. Its name is the filename without the extension.
+# Override individual fields under tasks.<name> in dev.yaml or prod.yaml. List overrides replace the whole list.
+title: Update trackers
+prompt_file: Setup/Tasks/Update trackers.md
+runner: claude-agent
+model: claude-sonnet-5
+tools: [Read, Write, Edit, Glob, Grep, Agent, WebFetch, WebSearch, mcp__brave-search__brave_web_search]
+max_turns: 80
+post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

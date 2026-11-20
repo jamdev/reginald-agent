@@ -1,0 +1,6 @@
+# Reginald discovers this MCP server automatically. Its name is the filename without the extension.
+# Override individual fields under tools.<name> in dev.yaml or prod.yaml. List overrides replace the whole list.
+transport: stdio
+command: npx
+args: ["-y", "@brave/brave-search-mcp-server"]
+env: [BRAVE_API_KEY]

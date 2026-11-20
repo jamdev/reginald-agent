@@ -1,0 +1,10 @@
+[Unit]
+Description=reginald timer: archive-sweep
+
+[Timer]
+OnCalendar=Mon *-*-01..07 10:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

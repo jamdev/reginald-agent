@@ -1,0 +1,12 @@
+previous_command,current_command
+reginald run,reginald task run
+reginald tasks,reginald task list
+reginald runs list,reginald task run-history
+reginald runs show,reginald task inspect-run
+reginald runs dispatch,reginald task process-queue
+reginald runs request,reginald task add-to-queue
+reginald intake,reginald vault identify-changes
+reginald events list,reginald vault list-events
+reginald sql run,reginald db run-sql
+reginald publish,reginald vault publish
+reginald publish ob,reginald vault ob

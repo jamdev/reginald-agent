@@ -1,0 +1,17 @@
+# Template unit: one instance per task.
+#   systemctl enable --now reginald-task@research-new-developments.timer
+[Unit]
+Description=reginald task: %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=reginald
+Group=reginald
+EnvironmentFile=/etc/reginald/env
+Environment=REGINALD_ENV=prod
+WorkingDirectory=/opt/reginald
+ExecStart=/opt/reginald/.venv/bin/reginald task run %i
+TimeoutStartSec=3h
+Nice=5

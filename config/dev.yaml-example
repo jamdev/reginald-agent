@@ -1,0 +1,23 @@
+# Copy config/dev.yaml-example to config/dev.yaml to initialise development settings.
+# Development overlay (Mac). Safety rails: scratch vault, console email,
+# publish disabled, dev Logfire environment.
+# In dev, Reginald loads dev.yaml after base.yaml and all YAML definitions in tools.d/ and tasks.d/.
+# Override individual fields under tools.<filename stem> or tasks.<filename stem>.
+# For example, tasks: {triage-inbox: {max_turns: 15}} changes only that limit in dev.
+# An override of a list such as a task's tools replaces the entire list.
+
+vault_path: ../vault      # scratch clone, never pushes to main
+db_path: ~/.local/share/reginald/dev.db
+
+git:
+  push: false
+
+site:
+  enabled: false
+
+email:
+  provider: console
+  allowlist: [insert-email-here@domain.name]
+
+logfire:
+  environment: dev

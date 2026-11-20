@@ -1,0 +1,10 @@
+[Unit]
+Description=reginald timer: source-verification
+
+[Timer]
+OnCalendar=Mon *-*-15..21 10:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

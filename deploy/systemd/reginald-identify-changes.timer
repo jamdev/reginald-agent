@@ -1,0 +1,12 @@
+[Unit]
+Description=reginald timer: identify changes in the vault
+
+[Timer]
+# Scan every day, ahead of the weekday noon outbox drain. Task runs also scan
+# after the commit stage. Only action-edits selects identify-changes as a pre-step.
+OnCalendar=*-*-* 11:30
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

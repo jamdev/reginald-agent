@@ -1,0 +1,14 @@
+[Unit]
+Description=reginald vault identify-changes — notice contributor changes, record events, publish
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=reginald
+Group=reginald
+EnvironmentFile=/etc/reginald/env
+Environment=REGINALD_ENV=prod
+WorkingDirectory=/opt/reginald
+# The scan takes the same lock as a task run and resumes from the saved Git cursor.
+ExecStart=/opt/reginald/.venv/bin/reginald vault identify-changes
