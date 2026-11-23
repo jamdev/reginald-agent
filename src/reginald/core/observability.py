@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import contextmanager
+from copy import copy
 from functools import lru_cache
 
 from ..domain.models import DoctorCheck, RunRecord
@@ -17,6 +18,7 @@ logger = logging.getLogger("reginald")
 LEVEL_ENV_VAR = "REGINALD_LOG_LEVEL"
 
 _logfire = None
+_capture_chars: int = 0
 _logfire_handler: logging.Handler | None = None
 
 
@@ -53,8 +55,38 @@ def resolve_level(config: Config) -> int:
     return level
 
 
+def capture_chars() -> int:
+    return _capture_chars if _logfire is not None else 0
+
+
+def configure_agent_instrumentation(agent) -> None:
+    if _logfire is None:
+        agent.instrument = False
+        return
+    try:
+        from ..runners.pydantic_agent.instrumentation import ConversationInstrumentation
+
+        instance = getattr(_logfire, "DEFAULT_LOGFIRE_INSTANCE", _logfire)
+        agent.instrument = ConversationInstrumentation(instance.config, capture_chars())
+    except Exception as exc:  # noqa: BLE001 — tracing must not abort a model run
+        agent.instrument = False
+        logger.warning("Pydantic AI tracing unavailable: %s", exc)
+
+
+def _mirror_conversation_record(record: logging.LogRecord):
+    # Python 3.12 handler filters can replace just the exported record. Leave
+    # the journal's diagnostic detail and dry-run preview intact.
+    if not getattr(record, "conversation_excerpt", False):
+        return True
+    mirrored = copy(record)
+    *labels, content = record.args
+    mirrored.args = (*labels, str(content)[:capture_chars()])
+    return mirrored
+
+
 def setup(config: Config) -> None:
-    global _logfire, _logfire_handler  # noqa: PLW0603 — process-wide SDK and its log handler
+    global _logfire, _logfire_handler, _capture_chars  # noqa: PLW0603 — process-wide SDK and its log handler
+    _capture_chars = config.logfire.capture_chars
     level = resolve_level(config)
     # force=True: something imported earlier (logfire's plugin, for one) may have
     # already configured the root logger, which would make basicConfig a no-op.
@@ -88,20 +120,14 @@ def setup(config: Config) -> None:
             )
         logfire.configure(**configure_kwargs)
 
-        # Mirror the full reginald log (the same lines the CLI/journal shows) to
+        # Mirror journal records with the environment's conversation limit to
         # Logfire. Records emitted while an agent span is current nest under it,
         # so the per-turn agent log shows as that agent's log on the Agents page.
         handler = logfire.LogfireLoggingHandler()
+        handler.addFilter(_mirror_conversation_record)
         handler.setLevel(level)
         logger.addHandler(handler)
         _logfire_handler = handler
-
-        # The `pydantic_agent` runner uses Pydantic AI; instrumenting it makes its
-        # agent runs emit GenAI spans automatically. Claude and Codex use agent_span().
-        try:
-            logfire.instrument_pydantic_ai()
-        except Exception as exc:  # noqa: BLE001 — pydantic-ai may be absent
-            logger.debug("pydantic-ai instrumentation skipped: %s", exc)
 
         _logfire = logfire
     except ImportError:  # pragma: no cover
@@ -132,7 +158,7 @@ def agent_span(agent_name: str, model: str, *, provider: str, **extra):
     when logfire is off — the caller must guard for that.
 
     Claude and Codex use this span. Pydantic AI emits its own through
-    instrument_pydantic_ai().
+    its per-agent instrumentation settings.
     """
     if _logfire is None:
         yield None

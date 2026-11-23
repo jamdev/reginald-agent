@@ -72,7 +72,6 @@ class _FakeAdvanced:
 class _FakeModule:
     def __init__(self):
         self.configure_kwargs = None
-        self.instrumented = False
         self.DEFAULT_LOGFIRE_INSTANCE = SimpleNamespace(config=SimpleNamespace(_project_url=None))
 
     def configure(self, **kwargs):
@@ -86,9 +85,6 @@ class _FakeModule:
 
     def LogfireLoggingHandler(self):  # noqa: N802 - mirrors logfire API
         return _FakeHandler()
-
-    def instrument_pydantic_ai(self):
-        self.instrumented = True
 
 
 def test_doctor_reports_logfire_setup_and_project_url_availability(monkeypatch, config_with_logfire):
@@ -130,7 +126,7 @@ def test_setup_points_at_the_configured_base_url(monkeypatch, config_with_logfir
         advanced = fake.configure_kwargs["advanced"]
         assert advanced.base_url == config_with_logfire.logfire.base_url
         assert fake.configure_kwargs["console"] == {"show_project_link": False}
-        assert fake.instrumented is True                 # pydantic-ai instrumented
+        assert observability.capture_chars() == config_with_logfire.logfire.capture_chars
         assert observability._logfire is fake            # captured for span()/agent_span()
     finally:
         for h in list(logging.getLogger("reginald").handlers):

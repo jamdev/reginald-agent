@@ -3,7 +3,7 @@
 title: Archive sweep
 prompt_file: Setup/Tasks/Archive sweep.md
 runner: claude-agent
-model: claude-haiku-4-5     # move superseded notes, complete frontmatter, report
+model: claude-haiku-5-5     # move superseded notes, complete frontmatter, report
 tools: [Read, Write, Edit, Glob, Grep]
 max_turns: 60
 post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

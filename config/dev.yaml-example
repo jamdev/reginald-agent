@@ -20,4 +20,5 @@ email:
   allowlist: [insert-email-here@domain.name]
 
 logfire:
+  capture_chars: 1000  # Maximum characters per conversation field. Use false to disable.
   environment: dev

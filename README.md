@@ -156,7 +156,7 @@ So, it is convenient as-is.  Plus, over time, having a cross-reference of metada
 
 ### Observability
 
-Logfire provides logging and observability.  
+Logfire records agent runs, tool calls and configurable excerpts of the conversation. [Read an agent conversation](docs/LOGGING.md#read-the-agent-conversation)
 
 You'll need an account and a write token.  It's documented in [INSTALL.md](docs/INSTALL.md).
 

@@ -3,7 +3,7 @@
 title: Triage inbox
 prompt_file: Setup/Tasks/Triage inbox.md
 runner: claude-agent
-model: claude-haiku-4-5     # mechanical classification against a fixed taxonomy
+model: claude-haiku-5-5     # mechanical classification against a fixed taxonomy
 tools: [Read, Write, Edit, Glob, Grep, mcp__inbox__move_file]
 max_turns: 60
 post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

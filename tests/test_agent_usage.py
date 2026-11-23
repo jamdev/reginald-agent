@@ -63,6 +63,7 @@ def test_codex_exports_overlapping_tool_calls_as_siblings(telemetry):
 def test_claude_exports_model_calls_and_one_usage_measurement_per_run(
     runs, telemetry, monkeypatch, config,
 ):
+    monkeypatch.setattr(observability, "_capture_chars", False)
     sdk = pytest.importorskip("claude_agent_sdk")
     from claude_agent_sdk.types import StreamEvent
 
@@ -227,10 +228,8 @@ def test_pydantic_agent_exports_the_reported_usage(runs, telemetry, monkeypatch,
     from pydantic_ai.models.function import FunctionModel
     from pydantic_ai.usage import RequestUsage
 
-    instance, spans, _ = telemetry
+    _, spans, _ = telemetry
     agent_class = sdk.Agent
-    monkeypatch.setattr(agent_class, "_instrument_default", False)
-    instance.instrument_pydantic_ai()
 
     def read_note(name: str) -> str:
         return name

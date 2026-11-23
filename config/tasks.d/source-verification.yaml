@@ -5,7 +5,7 @@ prompt_file: Setup/Tasks/Source verification.md
 runner: claude-agent
 # URL reachable/unchanged -> flag (for humans, not email). Watch the
 # "materially changed" judgment on Haiku; bump back to sonnet if it flags noise.
-model: claude-haiku-4-5
+model: claude-haiku-5-5
 tools: [Read, Write, Edit, Glob, Grep, WebFetch]
 max_turns: 80
 post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

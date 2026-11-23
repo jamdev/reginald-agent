@@ -19,5 +19,6 @@ email:
   allowlist: []
 
 logfire:
+  capture_chars: 100  # Maximum characters per conversation field. Use false to disable.
   enabled: true
   environment: prod

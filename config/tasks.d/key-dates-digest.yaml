@@ -3,7 +3,7 @@
 title: Key dates digest
 prompt_file: Setup/Tasks/Key dates digest.md
 runner: claude-agent
-model: claude-haiku-4-5     # sweep key_dates, group, format — near-deterministic
+model: claude-haiku-5-5     # sweep key_dates, group, format — near-deterministic
 tools: [Read, Write, Edit, Glob, Grep]
 max_turns: 40
 post: [normalize-frontmatter, backfill-uuids, set-publish]  # clean fm, valid uuid, publish flag

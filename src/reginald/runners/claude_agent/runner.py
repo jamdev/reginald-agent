@@ -18,15 +18,15 @@ from collections import deque
 from pathlib import Path
 
 from ...core.config import TaskConfig, ToolConfig
-from ...core.observability import agent_span, logger, set_run_usage
+from ...core.observability import agent_span, capture_chars, logger, set_run_usage
 from ...domain.models import DoctorCheck
 from ..base import RunnerResult, check_sdk
+from ..conversation import Conversation
 from ..tool_spans import ToolSpans
 from .auth import API_KEY_VAR, OAUTH_TOKEN_VAR, check_claude_auth, effective_credential
 from .usage import result_usage, trace_model_calls
 
-# Long tool inputs and agent prose are truncated in the journal; the full
-# exchange belongs in logfire, not in syslog.
+# Tool inputs and agent prose have a separate excerpt limit in the journal.
 _MAX_LOG_CHARS = 300
 
 # Checked in order — the first present key is what the call is "about".
@@ -200,7 +200,7 @@ class ClaudeAgentRunner:
             tool_turns: set[int] = set()
             messages = query(prompt=prompt, options=options)
             if options.include_partial_messages:
-                messages = trace_model_calls(messages, task.model, calls)
+                messages = trace_model_calls(messages, task.model, calls, conversation)
             async for message in messages:
                 elapsed = time.monotonic() - started
                 if isinstance(message, AssistantMessage):
@@ -233,18 +233,19 @@ class ClaudeAgentRunner:
                             if self._log_turns:
                                 logger.info(
                                     "[%s] turn %d (%.0fs): %s %s", task_name, turn, elapsed,
-                                    block.name, _tool_target(block.input),
+                                    block.name, _tool_target(block.input), extra={"conversation_excerpt": True},
                                 )
                             logger.debug(
                                 "[%s] turn %d input: %s", task_name, turn,
-                                _truncate(json.dumps(block.input, default=str)),
+                                _truncate(json.dumps(block.input, default=str)), extra={"conversation_excerpt": True},
                             )
                         elif isinstance(block, ServerToolResultBlock):
                             failed = "error_code" in block.content
                             calls.finish(block.tool_use_id, "failed" if failed else "completed")
                         elif isinstance(block, TextBlock):
                             logger.debug(
-                                "[%s] turn %d text: %s", task_name, turn, _truncate(block.text)
+                                "[%s] turn %d text: %s", task_name, turn, _truncate(block.text),
+                                extra={"conversation_excerpt": True},
                             )
                     if main_response:
                         result.tool_calling_turns = len(tool_turns)
@@ -259,6 +260,7 @@ class ClaudeAgentRunner:
                             logger.debug(
                                 "[%s] tool result %s: %s", task_name,
                                 "ERROR" if block.is_error else "ok", _truncate(str(block.content)),
+                                extra={"conversation_excerpt": True},
                             )
 
                 elif isinstance(message, SystemMessage):
@@ -291,6 +293,7 @@ class ClaudeAgentRunner:
 
         logger.info("claude-agent run start task=%s model=%s", task_name, task.model)
         with agent_span(provider="anthropic", agent_name=task.title, model=task.model) as agent:
+            conversation = Conversation(prompt, capture_chars())
             calls = ToolSpans(name for name in task.tools if not name.endswith("__*"))
             options.include_partial_messages = agent is not None
             failure = None
@@ -315,5 +318,6 @@ class ClaudeAgentRunner:
                         # Keep the SDK stack when replacing the fallback with the CLI's diagnosis.
                         diagnostic = RuntimeError(result.error).with_traceback(failure.__traceback__)
                     agent.record_exception(diagnostic)
+            conversation.finish(agent, result.output if result.ok else "")
             set_run_usage(agent, result)
         return result

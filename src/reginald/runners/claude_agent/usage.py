@@ -7,6 +7,7 @@ from contextlib import ExitStack, closing
 from typing import TYPE_CHECKING
 
 from ...core.observability import logger, record_histogram, span
+from ..conversation import Conversation, excerpt
 from ..tool_spans import ToolSpans
 
 if TYPE_CHECKING:
@@ -100,17 +101,90 @@ _FINISH_REASONS = {
 }
 
 
-def _finish_response(call, tool_names, finish, tools: ToolSpans) -> None:
-    tools.set_definitions(call)
-    if tool_names or finish:
-        parts = [{"type": "tool_call", "id": call_id, "name": name} for call_id, name in tool_names.items()]
-        call.set_attribute("gen_ai.output.messages", [{"role": "assistant", "parts": parts, **finish}])
-    if finish:
-        call.set_attribute("gen_ai.response.finish_reasons", [finish["finish_reason"]])
+def _message_parts(blocks, limit: int) -> list[dict]:
+    from claude_agent_sdk import (
+        ServerToolResultBlock, ServerToolUseBlock, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock,
+    )
+
+    parts = []
+    for block in blocks:
+        if isinstance(block, (ToolUseBlock, ServerToolUseBlock)):
+            part = {"type": "tool_call", "id": block.id, "name": block.name}
+            if limit:
+                part["arguments"] = excerpt(block.input, limit)
+            parts.append(part)
+        elif limit and isinstance(block, (ToolResultBlock, ServerToolResultBlock)):
+            parts.append({"type": "tool_call_response", "id": block.tool_use_id,
+                          "result": excerpt(block.content, limit)})
+        elif limit and isinstance(block, TextBlock):
+            parts.append({"type": "text", "content": block.text[:limit]})
+        elif limit and isinstance(block, ThinkingBlock):
+            parts.append({"type": "thinking", "content": block.thinking[:limit]})
+    return parts
+
+
+class _ResponseParts:
+    """Collect one response. The SDK can also emit assembled blocks before message_stop."""
+
+    def __init__(self, conversation: Conversation):
+        self.conversation = conversation
+        self.message = None
+        self.limit = conversation.limit
+        self.streamed: dict[int, dict] = {}
+        self.assembled: list[dict] = []
+
+    def start(self, index: int, block: dict) -> None:
+        kind = block.get("type")
+        if kind in ("tool_use", "server_tool_use") and block.get("id") and block.get("name"):
+            part = {"type": "tool_call", "id": block["id"], "name": block["name"]}
+            if self.limit and block.get("input"):
+                part["arguments"] = excerpt(block["input"], self.limit)
+        elif self.limit and kind in ("text", "thinking"):
+            part = {"type": kind, "content": (block.get(kind) or "")[:self.limit]}
+        else:
+            return
+        self.streamed[index] = part
+
+    def delta(self, index: int, delta: dict) -> None:
+        part = self.streamed.get(index)
+        if not self.limit or part is None:
+            return
+        source, target = {"text": ("text", "content"), "thinking": ("thinking", "content"),
+                          "tool_call": ("partial_json", "arguments")}[part["type"]]
+        chunk = delta.get(source)
+        if isinstance(chunk, str):
+            prefix = part.get(target, "")
+            part[target] = prefix + chunk[:self.limit - len(prefix)]
+
+    def update_message(self) -> list[dict]:
+        # Completed SDK blocks carry the parsed input. Streamed blocks also
+        # cover an interrupted response with no assembled message.
+        # Match calls by ID, and other blocks by type in emission order.
+        # An SDK-only server result can sit between two streamed tool calls.
+        remaining = list(self.streamed.values())
+        parts = []
+        for part in self.assembled:
+            for i, streamed in enumerate(remaining):
+                if (streamed["type"], streamed.get("id")) == (part["type"], part.get("id")):
+                    parts.extend(remaining[:i])
+                    del remaining[:i + 1]
+                    break
+            parts.append(part)
+        parts.extend(remaining)
+        self.message = self.conversation.add("assistant", parts, message=self.message)
+        return parts
+
+    def finish(self, call, finish, tools: ToolSpans) -> None:
+        tools.set_definitions(call)
+        parts = self.update_message()
+        if parts or finish:
+            call.set_attribute("gen_ai.output.messages", [{"role": "assistant", "parts": parts, **finish}])
+        if finish:
+            call.set_attribute("gen_ai.response.finish_reasons", [finish["finish_reason"]])
 
 
 async def trace_model_calls(
-    messages: AsyncIterable[Message], default_model: str, tools: ToolSpans,
+    messages: AsyncIterable[Message], default_model: str, tools: ToolSpans, conversation: Conversation,
 ) -> AsyncIterator[Message]:
     """Time each streamed response, forwarding ordinary messages to the runner.
 
@@ -118,7 +192,7 @@ async def trace_model_calls(
     messages with the same ID. Only the final usage delta has the real output count.
     """
     from claude_agent_sdk.types import (
-        AssistantMessage, ResultMessage, ServerToolUseBlock, StreamEvent, ToolUseBlock,
+        AssistantMessage, ResultMessage, StreamEvent, UserMessage,
     )
 
     # A trailing SDK error describes the run. Its runner records the diagnosis,
@@ -128,14 +202,26 @@ async def trace_model_calls(
     with closing(ExitStack()) as active:
         usage = None
         response_id = None
-        tool_names: dict[str, str] = {}
+        parts = _ResponseParts(conversation)
         async for message in messages:
             if not isinstance(message, StreamEvent):
-                if (usage is not None and isinstance(message, AssistantMessage)
-                        and not message.parent_tool_use_id and message.message_id == response_id):
-                    # Merged SDK messages and streamed content can describe the same call.
-                    tool_names.update((block.id, block.name) for block in message.content
-                                      if isinstance(block, (ToolUseBlock, ServerToolUseBlock)))
+                if isinstance(message, AssistantMessage) and not message.parent_tool_use_id:
+                    rendered = _message_parts(message.content, conversation.limit)
+                    if not message.error:
+                        if message.message_id == response_id and (usage is not None or response_id):
+                            parts.assembled.extend(rendered)
+                            parts.update_message()
+                        else:
+                            conversation.add("assistant", rendered)
+                elif isinstance(message, UserMessage) and conversation.limit and not message.parent_tool_use_id:
+                    if isinstance(message.content, str):
+                        user_parts = [conversation.text(message.content)]
+                        # The runner already recorded the initial task prompt.
+                        if len(conversation.messages) == 1 and conversation.messages[0]["parts"] == user_parts:
+                            user_parts = []
+                    else:
+                        user_parts = _message_parts(message.content, conversation.limit)
+                    conversation.add("user", user_parts)
                 if isinstance(message, ResultMessage):
                     active.close()
                     usage = None
@@ -163,18 +249,21 @@ async def trace_model_calls(
                 response_id = response.get("id")
                 if response_id:
                     call.set_attribute("gen_ai.response.id", response_id)
-                tool_names = {}
+                parts = _ResponseParts(conversation)
+                if conversation.messages:
+                    call.set_attribute("gen_ai.input.messages", conversation.messages)
                 finish = {}
-                active.callback(_finish_response, call, tool_names, finish, tools)
+                active.callback(parts.finish, call, finish, tools)
                 initial = response.get("usage")
                 usage = initial.copy() if isinstance(initial, dict) else {}
                 usage.pop("output_tokens", None)  # placeholder at message_start
                 active.callback(_finish_call, call, labels, usage)
             elif kind == "content_block_start" and usage is not None:
                 block = event.get("content_block")
-                if isinstance(block, dict) and block.get("type") in ("tool_use", "server_tool_use"):
-                    if block.get("id") and block.get("name"):
-                        tool_names[block["id"]] = block["name"]
+                if isinstance(block, dict):
+                    parts.start(event.get("index", len(parts.streamed)), block)
+            elif kind == "content_block_delta" and usage is not None:
+                parts.delta(event.get("index", 0), event.get("delta") or {})
             elif kind == "message_delta" and usage is not None:
                 reason = (event.get("delta") or {}).get("stop_reason")
                 if reason:

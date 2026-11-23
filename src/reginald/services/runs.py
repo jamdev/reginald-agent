@@ -207,7 +207,8 @@ class RunService:
         )
 
         if dry_run:
-            logger.info("dry-run: rendered prompt for %s:\n%s", task_name, prompt[:2000])
+            logger.info("dry-run: rendered prompt for %s:\n%s", task_name, prompt[:2000],
+                        extra={"conversation_excerpt": True})
             return self._finalise(run_id, "success", dry_run=True, error="dry-run: no agent invoked")
 
         # 5. agent — unless the pre steps found no work (skip-empty: the
