@@ -74,6 +74,8 @@ Once the backup checks out, run the updater on the host. With no argument, it se
 sudo /opt/reginald/deploy/update.sh
 ```
 
+On upgrading to conversation capture, hosts with Logfire enabled start exporting up to 100 characters per conversation field. To choose another limit or disable capture for the first run after updating, set `logfire.capture_chars` in the host overlay before updating. [Conversation settings](LOGGING.md#read-the-agent-conversation)
+
 The updater installs the locked dependencies, backs up and migrates the database, refreshes the wrapper and units, restarts active timers and runs `doctor`. Check the release row for the version and tag you intended. Review any `Changed template` lines and apply the relevant settings to your host's YAML files. New timers need to be enabled individually. [Configuration](USAGE.md#configuration) · [Enabling timers](TIMERS.md#enabling)
 
 To deploy a specific tag, for example `v1.0.2`, use this command instead. After the updater finishes, verify the installed version and active schedules.

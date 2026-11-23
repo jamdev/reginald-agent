@@ -6,6 +6,7 @@ import sys
 
 from pydantic import RootModel
 
+from ..conversation import excerpt
 from .auth import credential_home
 
 
@@ -28,7 +29,19 @@ def mcp_servers(operations, registry):
     return servers
 
 
-def relay(method, payload):
+# SDK fields exposed by each tool item. Take the excerpt in the worker so
+# command output and MCP payloads do not inflate the supervisor's event stream.
+_TOOL_FIELDS = {
+    "commandExecution": ("command", "aggregated_output"),
+    "fileChange": ("changes", None),
+    "mcpToolCall": ("arguments", "result"),
+    "dynamicToolCall": ("arguments", "content_items"),
+    "webSearch": ("query", "results"),
+    "imageView": ("path", None),
+}
+
+
+def relay(method, payload, limit: int = 0):
     if method == "turn/started":
         emit("turn")
     elif method == "thread/tokenUsage/updated":
@@ -38,11 +51,24 @@ def relay(method, payload):
         if item.type == "agentMessage":
             if method == "item/completed" and (item.phase is None or item.phase.value == "final_answer"):
                 emit("output", text=item.text)
-        elif item.type in ("commandExecution", "fileChange", "mcpToolCall", "webSearch",
-                           "dynamicToolCall", "imageView"):
+            elif method == "item/completed" and limit:
+                emit("message", part={"type": "text", "content": item.text[:limit]})
+        elif item.type == "reasoning" and method == "item/completed" and limit and item.summary:
+            emit("message", part={"type": "thinking", "content": "\n".join(item.summary)[:limit]})
+        elif item.type in _TOOL_FIELDS:
             name = f"mcp__{item.server}__{item.tool}" if item.type == "mcpToolCall" else item.type
             status = getattr(item, "status", None)
-            emit(method, id=item.id, name=name, status=getattr(status, "value", status))
+            fields = {}
+            if limit and method == "item/completed":
+                args_key, result_key = _TOOL_FIELDS[item.type]
+                arguments = getattr(item, args_key, None)
+                result = getattr(item, result_key) if result_key else None
+                if result is None:
+                    result = getattr(item, "error", None)
+                for key, value in (("arguments", arguments), ("result", result)):
+                    if value is not None:
+                        fields[key] = excerpt(value, limit)
+            emit(method, id=item.id, name=name, status=getattr(status, "value", status), **fields)
     elif method == "turn/completed":
         turn = payload.turn
         if turn.status.value != "completed":
@@ -105,7 +131,7 @@ def execute(job):
         try:
             while True:
                 event = client.next_turn_notification(turn)
-                relay(event.method, event.payload)
+                relay(event.method, event.payload, job["capture_chars"])
                 if event.method == "turn/completed":
                     break
         except KeyboardInterrupt:

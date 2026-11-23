@@ -52,12 +52,20 @@ class EmailConfig(BaseModel):
 
 
 class LogfireConfig(BaseModel):
+    capture_chars: int | Literal[False] = 100
     enabled: bool = False
     environment: str = "dev"
     # Non-default (e.g. EU-region or self-hosted) Logfire instance. Empty means
     # the SDK's default endpoint. Set per instance in YAML, never hardcoded in
     # code — the token in $LOGFIRE_TOKEN must belong to the same instance.
     base_url: str = ""
+
+    @field_validator("capture_chars", mode="before")
+    @classmethod
+    def validate_capture_chars(cls, value):
+        if value is False or (type(value) is int and value > 0):
+            return value
+        raise ValueError("capture_chars must be a positive integer or false")
 
 
 class LoggingConfig(BaseModel):

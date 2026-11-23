@@ -151,6 +151,7 @@ The config *directory* is `$REGINALD_CONFIG_DIR` if set, else `<repo>/config`, e
 | `email.reply_to` | `null` | Optional reply-to. |
 | `email.allowlist` | `[]` | **Empty means no restriction.** Non-empty means only these addresses receive mail; everyone else is marked failed with a note. |
 | `logfire.enabled` | `false` | Send traces, logs, task completions and usage metrics. Production uses `LOGFIRE_TOKEN` from the host environment. |
+| `logfire.capture_chars` | `100` | Maximum characters per conversation field exported by any runner. Use a positive integer or YAML `false` to disable content capture and keep operational telemetry. The development template sets `1000`. [Inspect the conversation](LOGGING.md#read-the-agent-conversation) |
 | `logfire.environment` | `dev` | Environment tag. |
 | `logging.level` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`. Overridden by `$REGINALD_LOG_LEVEL`. |
 | `logging.agent_turns` | `true` | One `INFO` line per agent tool call. Turn this off and a run logs only start and finish. |

@@ -2,6 +2,14 @@
 
 With Logfire enabled, Reginald traces tasks, email delivery and standalone commands. The Claude and Codex runners also write tool summaries to the journal at `INFO` by default. For the written account of what a task checked, changed or flagged, open `Setup/Logs/Index.md` in the vault.
 
+## Read the agent conversation
+
+In **Agents**, select a task, open **Runs**, choose a run and open its conversation. In **Live**, expand `run.agent` and select `invoke_agent`. Its `pydantic_ai.all_messages` attribute contains the conversation observed by the runner. Claude and Pydantic AI also attach message excerpts to individual `chat` spans. Codex exposes a conversation turn through the SDK, so its messages appear on the agent span.
+
+With Logfire enabled, all three runners capture the task prompt, assistant text, tool arguments, tool results and any reasoning text or summary the SDK makes visible. Claude's conversation covers the main agent. The production default is the first **100 characters per content field**, including punctuation in serialized tool data. The development template uses **1,000**. The limit applies to each complete field across all its streaming chunks. Tool names, IDs, outcomes, timing and usage are recorded separately.
+
+To change production capture, run `sudoedit /opt/reginald/config/prod.yaml` and set `capture_chars: 100` to the desired positive integer in the existing `logfire` section. Set `capture_chars: false` there for metadata-only traces. For development, use the same key in `config/dev.yaml`. The next run picks up the setting. Existing traces keep the content originally recorded. The same limit applies to conversation excerpts mirrored from the journal, including at `DEBUG`. The journal has its own verbosity and excerpt limits. [Configuration reference](USAGE.md#configuration)
+
 ## Find individual tool calls in Logfire
 
 1. On the production host, run `sudo reginald doctor` and open the project URL on the `logfire` row.
@@ -118,7 +126,7 @@ Reginald resolves the level at startup, in this order:
 
 - **The Tools tab is empty despite journal tool calls.** Select a run recorded after deploying structured tool tracing. Older Claude runs can have tool names only in the mirrored journal messages. In **Live**, filter on `service_name = 'reginald'`, include **Info**, and expand the agent span to see those lines.
 - **The journal has tool calls, but Live has no Reginald records.** Run `sudo reginald doctor`. A `[WARN]` with `Tracing unavailable` means SDK setup failed. Read the startup warning and check that `/etc/reginald/env` supplies a project write token for the configured region. A `[WARN]` with `project URL unavailable` means the SDK initialised and could not yet report a project URL. The SDK can read it from saved credentials or obtain it by validating a token with Logfire in the background. To confirm delivery, look for a recent Reginald record in Live with the expected project, environment and time range. [Configure Logfire](INSTALL.md#configure-logfire)
-- **Tool names are visible, but inputs and results are missing.** Those details require `DEBUG` when the run executes. For a run recorded at `DEBUG`, filter on `service_name = 'reginald'`, include **Debug** in the level filter, and expand the agent span to read the input and result lines.
+- **Tool names are visible, but inputs and results are missing.** Check `logfire.capture_chars` in the environment used for that run. Open the conversation on the agent span of a run recorded with a positive limit. Older Claude runs may have excerpts only in mirrored debug logs.
 
 ## Task completion alerts
 

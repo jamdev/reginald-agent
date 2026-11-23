@@ -9,9 +9,10 @@ from contextlib import suppress
 from pathlib import Path
 
 from ...core.config import TaskConfig, ToolConfig
-from ...core.observability import agent_span, logger, set_run_usage
+from ...core.observability import agent_span, capture_chars, logger, set_run_usage
 from ...domain.models import DoctorCheck
 from ..base import RunnerResult, check_sdk
+from ..conversation import Conversation
 from ..tool_spans import ToolSpans
 from .usage import update_usage
 
@@ -30,12 +31,13 @@ class CodexAgentRunner:
             tools: dict[str, ToolConfig]) -> RunnerResult:
         result = RunnerResult(ok=False)
         with agent_span(agent_name=task.title, model=task.model, provider="openai") as agent:
+            conversation = Conversation(prompt, capture_chars())
             # Native permission modes and wildcard grants are not callable names.
             calls = ToolSpans(
                 name for name in task.tools if name.startswith("mcp__") and not name.endswith("__*")
             )
             try:
-                asyncio.run(self._run(task_name, task, prompt, vault_path, tools, result, calls))
+                asyncio.run(self._run(task_name, task, prompt, vault_path, tools, result, calls, conversation))
             except Exception as exc:  # noqa: BLE001 — runner boundary
                 result.ok = False
                 result.error = str(exc) or type(exc).__name__
@@ -43,13 +45,15 @@ class CodexAgentRunner:
             finally:
                 calls.close()
                 calls.set_definitions(agent)
+            conversation.finish(agent, result.output)
             set_run_usage(agent, result)
         return result
 
-    async def _run(self, task_name, task, prompt, vault_path, tools, result, calls):
+    async def _run(self, task_name, task, prompt, vault_path, tools, result, calls, conversation):
         operations = task.mcp_operations
         job = {
             "vault": str(vault_path.resolve()), "prompt": prompt, "model": task.model,
+            "capture_chars": conversation.limit,
             "write": "CodexWorkspaceWrite" in task.tools,
             "operations": {k: sorted(v) for k, v in operations.items()},
             "servers": {k: tools[k].model_dump(mode="json") for k in operations},
@@ -90,8 +94,20 @@ class CodexAgentRunner:
                                 logger.info("[%s] Codex tool: %s", task_name, event["name"])
                         case "item/completed":
                             calls.finish(event["id"], event["status"])
+                            if conversation.limit:
+                                part = {"type": "tool_call", "id": event["id"], "name": event["name"]}
+                                if "arguments" in event:
+                                    part["arguments"] = event["arguments"]
+                                conversation.add("assistant", [part])
+                                if "result" in event:
+                                    conversation.add("user", [{"type": "tool_call_response", "id": event["id"],
+                                                               "name": event["name"], "result": event["result"]}])
+                        case "message":
+                            conversation.add("assistant", [event["part"]])
                         case "output":
                             result.output = event["text"]
+                            if conversation.limit:
+                                conversation.add("assistant", [conversation.text(result.output)])
                         case "done":
                             result.ok = True
                 status = await process.wait()

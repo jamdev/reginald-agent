@@ -10,7 +10,7 @@ import asyncio
 from pathlib import Path
 
 from ...core.config import TaskConfig, ToolConfig
-from ...core.observability import logger
+from ...core.observability import configure_agent_instrumentation, logger
 from ...domain.models import DoctorCheck
 from ..base import RunnerResult, check_sdk
 from .auth import check_pydantic_auth
@@ -62,6 +62,7 @@ class PydanticAgentRunner:
                     toolsets.append(server.prefixed(name.replace("-", "_")))
 
             agent = Agent(model=task.model, name=task.title, toolsets=toolsets)
+            configure_agent_instrumentation(agent)
             async with agent:
                 result = await agent.run(
                     prompt,

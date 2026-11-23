@@ -150,7 +150,7 @@ Use `sudo reginald` for CLI commands on the host. The wrapper enters the applica
 
 #### Configure Logfire
 
-The production template enables Logfire tracing and uses the EU region. If startup reports `No user token was found matching` the EU URL, Reginald continues with journal logging. The SDK has fallen back to looking for a user login. For an unattended server, configure a project write token as follows.
+The production template enables Logfire tracing in the EU region and captures up to 100 characters per conversation field. [Conversation settings](LOGGING.md#read-the-agent-conversation) If startup reports `No user token was found matching` the EU URL, Reginald continues with journal logging. The SDK has fallen back to looking for a user login. For an unattended server, configure a project write token as follows.
 
 1. In your browser, open or create a project in [Logfire EU](https://logfire-eu.pydantic.dev). Open **Settings → Write tokens → New write token** and copy the token. If your project is in the US, use its US dashboard and set `base_url: https://logfire-us.pydantic.dev` in the existing `logfire` section of `/opt/reginald/config/prod.yaml`. The token and endpoint must belong to the same region. [Write tokens](https://pydantic.dev/docs/logfire/manage/create-write-tokens/) · [Data regions](https://pydantic.dev/docs/logfire/manage/data-regions/)
 2. On the server, run `sudoedit /etc/reginald/env`. Find `# LOGFIRE_TOKEN=REPLACE-ME`, remove the leading `#` and space, and replace `REPLACE-ME` with the copied token. Save the file. Each new CLI invocation and scheduled service reads it at startup.

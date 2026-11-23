@@ -4,6 +4,8 @@ Every [task](TASKS.md) must specify both `runner` and `model` in its effective c
 
 A runner is the harness Reginald uses to start the agent, pass it the rendered prompt and tools, and collect the result. Reginald calls the task's configured steps around that agent call. [Task steps](STEPS.md)
 
+All runners use the environment’s `logfire.capture_chars` limit for conversation excerpts. [Read the agent conversation](LOGGING.md#read-the-agent-conversation)
+
 Reginald validates these fields after merging the task definition and environment overlay. The seven shipped tasks explicitly select `claude-agent` and their existing Sonnet or Haiku model. To see the effective selections from the checkout, run `uv run reginald --env dev task list`. Each row shows the task, runner, model and tool grants.
 
 | Runner | How it runs the task | Work limit |

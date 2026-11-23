@@ -111,3 +111,40 @@ def test_abrupt_exit_cannot_report_success(tmp_path, monkeypatch):
     mock_worker(monkeypatch, "import sys; sys.stdin.read()")
     result = CodexAgentRunner().run("demo", task(), "hello", tmp_path, {})
     assert not result.ok and "without a successful run" in result.error
+
+
+@pytest.mark.parametrize("limit", [4, False])
+def test_conversation_export_keeps_the_full_task_output(tmp_path, monkeypatch, telemetry, limit):
+    from reginald.core import observability
+
+    monkeypatch.setattr(observability, "_capture_chars", limit)
+    mock_worker(monkeypatch, """
+import json, sys
+from types import SimpleNamespace
+from reginald.runners.codex_agent.worker import relay
+job = json.load(sys.stdin)
+assert job["prompt"] == "task-secret"
+for fields in (
+    dict(type="reasoning", summary=["plan-secret"], content=["private reasoning"]),
+    dict(type="agentMessage", phase=SimpleNamespace(value="commentary"), text="look-secret"),
+    dict(type="commandExecution", id="id", command="echo secret", aggregated_output="file-secret", status="completed"),
+    dict(type="agentMessage", phase=SimpleNamespace(value="final_answer"), text="done-secret"),
+):
+    payload = SimpleNamespace(item=SimpleNamespace(root=SimpleNamespace(**fields)))
+    if fields["type"] == "commandExecution":
+        relay("item/started", payload, job["capture_chars"])
+    relay("item/completed", payload, job["capture_chars"])
+print('{"kind":"done"}')
+""")
+    result = CodexAgentRunner().run("demo", task(), "task-secret", tmp_path, {})
+    assert result.ok and result.output == "done-secret"
+    agent, = [s for s in telemetry[1].get_finished_spans() if s.name.startswith("invoke_agent")
+              and s.attributes.get("logfire.span_type") == "span"]
+    attrs = dict(agent.attributes)
+    assert "private reasoning" not in str(attrs) and "-secret" not in str(attrs)
+    if limit:
+        messages = json.loads(attrs["pydantic_ai.all_messages"])
+        assert [p.get("content", p.get("arguments", p.get("result")))
+                for message in messages for p in message["parts"]] == ["task", "plan", "look", "echo", "file", "done"]
+    else:
+        assert "pydantic_ai.all_messages" not in attrs and "final_result" not in attrs
