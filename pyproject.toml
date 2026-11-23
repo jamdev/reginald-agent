@@ -1,6 +1,6 @@
 [project]
 name = "reginald"
-version = "1.0.0"
+version = "1.0.1"
 description = "Headless orchestrator for a know-how vault: scheduled agent runs, content-event outbox, per-topic subscriber emails, site publication."
 readme = "README.md"
 requires-python = ">=3.12"
