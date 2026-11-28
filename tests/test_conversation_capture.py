@@ -26,8 +26,12 @@ def check_brave_capture(telemetry, tool_name, limit):
     attrs = str([dict(s.attributes) for s in spans])
     assert "OFF_LIMITS" not in attrs
     if not limit:
+        assert "gen_ai.tool.call.arguments" not in tool.attributes
+        assert "gen_ai.tool.call.result" not in tool.attributes
         assert "tool.result_urls" not in tool.attributes and BRAVE_URLS[0] not in attrs
         return
+    assert tool.attributes["gen_ai.tool.call.arguments"] == "{}"
+    assert len(tool.attributes["gen_ai.tool.call.result"]) == limit
     urls = tool.attributes["tool.result_urls"]
     assert (json.loads(urls) if isinstance(urls, str) else list(urls)) == BRAVE_URLS
     agent, = [s for s in spans if s.attributes.get("gen_ai.operation.name") == "invoke_agent"]
@@ -210,3 +214,52 @@ def test_journal_mirror_limits_both_logfire_message_and_args(telemetry, monkeypa
     record, = [s for s in exporter.get_finished_spans() if s.attributes.get("logfire.span_type") == "log"]
     assert "OFF_LIMITS" not in str(record.attributes)
     assert record.attributes["logfire.msg"] == "[demo] turn 1 text: " + TEXT[:limit]
+
+
+def test_failed_tavily_extract_on_claude_and_pydantic_spans(telemetry, monkeypatch, tmp_path):
+    claude = pytest.importorskip("claude_agent_sdk")
+    pai = pytest.importorskip("pydantic_ai")
+    from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
+    from pydantic_ai.models.function import FunctionModel
+
+    tool = "mcp__tavily__tavily_extract"
+    args = {"urls": ["https://example.org"]}
+    error = "Tavily HTTP 429: Try again later"
+    monkeypatch.setattr(observability, "_capture_chars", 100)
+
+    async def query(prompt, options):
+        yield claude.SystemMessage("init", {"tools": [tool]})
+        yield claude.AssistantMessage(model="demo", content=[claude.ToolUseBlock("id", tool, args)])
+        yield claude.UserMessage(content=[claude.ToolResultBlock("id", error, is_error=True)])
+        yield claude.ResultMessage("success", 1, 1, False, 1, "s", result="done")
+
+    monkeypatch.setattr(claude, "query", query)
+    server = f"""
+from mcp.server.fastmcp import FastMCP
+server = FastMCP("tavily")
+@server.tool()
+def tavily_extract(urls: list[str]):
+    raise ValueError({error!r})
+server.run()
+"""
+
+    def respond(messages, info):
+        if len(messages) == 1:
+            return ModelResponse(parts=[ToolCallPart("tavily_tavily_extract", args)])
+        return ModelResponse(parts=[TextPart("done")])
+
+    agent = pai.Agent
+    monkeypatch.setattr(pai, "Agent", lambda model, **kw: agent(FunctionModel(respond), **kw))
+    tools = {"tavily": ToolConfig(command=sys.executable, args=["-c", server])}
+    for name, runner in [("claude-agent", ClaudeAgentRunner()), ("pydantic_agent", PydanticAgentRunner())]:
+        task = TaskConfig(title="Demo", model="demo", runner=name, tools=[tool])
+        result = runner.run("demo", task, "", tmp_path, tools)
+        assert result.ok, result.error
+
+    calls = [s.attributes for s in telemetry[1].get_finished_spans()
+             if s.attributes.get("tool.status") == "failed"]
+    assert len(calls) == 2
+    for call in calls:
+        assert json.loads(call["gen_ai.tool.call.arguments"]) == args
+        assert error in call["gen_ai.tool.call.result"]
+        assert call["tool.http.status_code"] == 429

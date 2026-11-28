@@ -22,7 +22,7 @@ from ...core.config import TaskConfig, ToolConfig
 from ...core.observability import agent_span, capture_chars, logger, set_run_usage
 from ...domain.models import DoctorCheck
 from ..base import RunnerResult, check_sdk, validate_tool_grants
-from ..conversation import Conversation
+from ..conversation import Conversation, excerpt
 from ..tool_spans import ToolSpans
 from .auth import API_KEY_VAR, OAUTH_TOKEN_VAR, check_claude_auth, effective_credential
 from .usage import result_usage, trace_model_calls
@@ -237,7 +237,8 @@ class ClaudeAgentRunner:
                             if main_response:
                                 tool_turns.add(turn)
                             if agent is not None:
-                                calls.start(block.id, block.name, turn=turn)
+                                arguments = excerpt(block.input, conversation.limit) if conversation.limit else None
+                                calls.start(block.id, block.name, turn=turn, arguments=arguments)
                             if self._log_turns:
                                 logger.info(
                                     "[%s] turn %d (%.0fs): %s %s", task_name, turn, elapsed,
@@ -249,7 +250,8 @@ class ClaudeAgentRunner:
                             )
                         elif isinstance(block, ServerToolResultBlock):
                             failed = "error_code" in block.content
-                            calls.finish(block.tool_use_id, "failed" if failed else "completed")
+                            content = excerpt(block.content, conversation.limit) if conversation.limit else None
+                            calls.finish(block.tool_use_id, "failed" if failed else "completed", result=content)
                         elif isinstance(block, TextBlock):
                             logger.debug(
                                 "[%s] turn %d text: %s", task_name, turn, _truncate(block.text),

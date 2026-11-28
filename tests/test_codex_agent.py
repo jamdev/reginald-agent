@@ -182,12 +182,16 @@ print('{{"kind":"done"}}')
     agent = spans["invoke_agent Demo"]
     assert "PRIVATE" not in str(spans)
     if limit:
+        assert json.loads(tool["gen_ai.tool.call.arguments"]) == {"query": "dates"}
+        assert len(tool["gen_ai.tool.call.result"]) == limit
         assert json.loads(tool["tool.result_urls"]) == urls
         parts = [p for m in json.loads(agent["pydantic_ai.all_messages"]) for p in m["parts"]]
         response, = [p for p in parts if p["type"] == "tool_call_response"]
         assert response["result_urls"] == urls
         assert len(response["result"]) == limit
     else:
+        assert "gen_ai.tool.call.arguments" not in tool
+        assert "gen_ai.tool.call.result" not in tool
         assert "tool.result_urls" not in tool
         assert "pydantic_ai.all_messages" not in agent
 
@@ -224,3 +228,37 @@ def test_codex_checks_mcp_operations_on_active_thread():
     validate_mcp_operations(Client(), "t", {"local": ["find", "*"]})
     with pytest.raises(ValueError, match="mcp__local__typo"):
         validate_mcp_operations(Client(), "t", {"local": ["typo", "*"]})
+
+
+@pytest.mark.parametrize("error", ["Tavily HTTP 401: Unauthorized. Very long detail.",
+                                   "Tavily HTTP 429: Try again in sixty seconds."])
+def test_failed_tavily_call_exports_request_and_error(tmp_path, monkeypatch, telemetry, error):
+    from reginald.core import observability
+
+    pytest.importorskip("openai_codex")
+    monkeypatch.setattr(observability, "_capture_chars", 35)
+    mock_worker(monkeypatch, f"error = {error!r}\n" + """
+import json, sys
+from types import SimpleNamespace
+from openai_codex.generated.v2_all import McpToolCallResult
+from reginald.runners.codex_agent.worker import relay
+limit = json.load(sys.stdin)["capture_chars"]
+item = SimpleNamespace(type="mcpToolCall", id="extract-1", server="tavily", tool="tavily_extract",
+                       arguments={"urls":["https://example.org"]}, result=None, status="inProgress")
+payload = SimpleNamespace(item=SimpleNamespace(root=item))
+relay("item/started", payload, limit)
+item.result = McpToolCallResult(content=[{"type":"text","text":error}])
+item.status = "failed"
+relay("item/completed", payload, limit)
+print('{"kind":"done"}')
+""")
+    result = CodexAgentRunner().run("demo", task(), "", tmp_path, {})
+    assert result.ok, result.error
+    tool, = [s.attributes for s in telemetry[1].get_finished_spans()
+             if s.name == "execute_tool mcp__tavily__tavily_extract" and s.attributes.get("tool.status") == "failed"]
+    assert json.loads(tool["gen_ai.tool.call.arguments"]) == {"urls": ["https://example.org"]}
+    assert tool["tool.http.status_code"] == int(error.split()[2].rstrip(":"))
+    if "Unauthorized" in error:
+        assert "Scrubbed" in tool["gen_ai.tool.call.result"]
+    else:
+        assert tool["gen_ai.tool.call.result"] == error[:35]

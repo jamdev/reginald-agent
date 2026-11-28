@@ -4,9 +4,11 @@ import json
 from copy import copy
 
 from opentelemetry.trace import get_current_span
+from pydantic_ai.messages import ToolReturnPart
 from pydantic_ai.models.instrumented import InstrumentationSettings
 
 from ..conversation import BRAVE_WEB_SEARCH, brave_result_urls, excerpt
+from ..tool_spans import set_tool_result
 
 
 class ConversationInstrumentation(InstrumentationSettings):
@@ -21,9 +23,20 @@ class ConversationInstrumentation(InstrumentationSettings):
         self.urls_by_call: dict[str, list[str]] = {}
 
     async def trace_mcp_call(self, ctx, call_tool, name, args):
-        result = await call_tool(name, args)
+        span = get_current_span()
+        span.set_attribute("gen_ai.tool.call.arguments", excerpt(args, self.limit))
+        try:
+            result = await call_tool(name, args)
+        except Exception as exc:
+            set_tool_result(span, name, excerpt(str(exc), self.limit), failed=True)
+            span.set_attribute("tool.status", "failed")
+            raise
+        # The SDK separates binary attachments when rendering a text tool response.
+        content = ToolReturnPart(name, result).model_response_str()
+        span.set_attribute("gen_ai.tool.call.result", excerpt(content, self.limit))
+        span.set_attribute("tool.status", "completed")
         if name == BRAVE_WEB_SEARCH and (urls := brave_result_urls(result)):
-            get_current_span().set_attribute("tool.result_urls", urls)
+            span.set_attribute("tool.result_urls", urls)
             self.urls_by_call[ctx.tool_call_id] = urls
         return result
 

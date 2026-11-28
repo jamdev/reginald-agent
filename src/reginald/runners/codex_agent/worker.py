@@ -80,17 +80,22 @@ def relay(method, payload, limit: int = 0):
             name = f"mcp__{item.server}__{item.tool}" if item.type == "mcpToolCall" else item.type
             status = getattr(item, "status", None)
             fields = {}
+            args_key, result_key = _TOOL_FIELDS[item.type]
+            if limit and (arguments := getattr(item, args_key, None)) is not None:
+                fields["arguments"] = excerpt(arguments, limit)
             if limit and method == "item/completed":
-                args_key, result_key = _TOOL_FIELDS[item.type]
-                arguments = getattr(item, args_key, None)
                 result = getattr(item, result_key) if result_key else None
                 if item.type == "mcpToolCall" and item.tool == BRAVE_WEB_SEARCH and result is not None:
                     fields["result_urls"] = brave_result_urls(result.content)
                 if result is None:
-                    result = getattr(item, "error", None)
-                for key, value in (("arguments", arguments), ("result", result)):
-                    if value is not None:
-                        fields[key] = excerpt(value, limit)
+                    error = getattr(item, "error", None)
+                    result = getattr(error, "message", error)
+                elif item.type == "mcpToolCall" and getattr(status, "value", status) == "failed":
+                    # MCP errors often arrive as successful transport replies with a text block.
+                    result = next((b["text"] for b in result.content
+                                   if isinstance(b, dict) and b.get("type") == "text" and b.get("text")), result)
+                if result is not None:
+                    fields["result"] = excerpt(result, limit)
             emit(method, id=item.id, name=name, status=getattr(status, "value", status), **fields)
     elif method == "turn/completed":
         turn = payload.turn

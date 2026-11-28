@@ -114,14 +114,16 @@ def _message_parts(blocks, limit: int, tools: ToolSpans) -> list[dict]:
                 part["arguments"] = excerpt(block.input, limit)
             parts.append(part)
         elif isinstance(block, (ToolResultBlock, ServerToolResultBlock)):
+            content = excerpt(block.content, limit) if limit else None
             urls = []
             if isinstance(block, ToolResultBlock):
                 name = tools.names_by_id.get(block.tool_use_id, "")
                 if limit and name.startswith("mcp__") and name.endswith(f"__{BRAVE_WEB_SEARCH}"):
                     urls = brave_result_urls(block.content)
-                tools.finish(block.tool_use_id, "failed" if block.is_error else "completed", result_urls=urls)
+                tools.finish(block.tool_use_id, "failed" if block.is_error else "completed",
+                             result=content, result_urls=urls)
             if limit:
-                part = {"type": "tool_call_response", "id": block.tool_use_id, "result": excerpt(block.content, limit)}
+                part = {"type": "tool_call_response", "id": block.tool_use_id, "result": content}
                 if urls:
                     part["result_urls"] = urls
                 parts.append(part)

@@ -90,12 +90,13 @@ class CodexAgentRunner:
                             update_usage(result, event["total"], task.model, api_billing)
                         case "item/started":
                             result.tool_calling_turns = 1
-                            calls.start(event["id"], event["name"], turn=1)
+                            calls.start(event["id"], event["name"], turn=1, arguments=event.get("arguments"))
                             if self.log_turns:
                                 logger.info("[%s] Codex tool: %s", task_name, event["name"])
                         case "item/completed":
                             urls = event.get("result_urls")
-                            calls.finish(event["id"], event["status"], result_urls=urls)
+                            calls.finish(event["id"], event["status"], arguments=event.get("arguments"),
+                                         result=event.get("result"), result_urls=urls)
                             if conversation.limit:
                                 part = {"type": "tool_call", "id": event["id"], "name": event["name"]}
                                 if "arguments" in event:
