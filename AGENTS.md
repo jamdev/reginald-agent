@@ -55,6 +55,9 @@ and the [callout protocol](docs/USAGE.md#the-callout-protocol).
 - **Python 3.12**, pinned by `.python-version`. Managed with **uv** against a
   committed `uv.lock`.
 - `make dev` / `make test` / `make lint`. All run through `uv run`.
+- Keep only `.yaml` files in `config/` and its subdirectories, with one exception
+  for the top-level `*.yaml-example` templates. Use one `.yaml` file per MCP
+  server in `config/tools.d/` and one per task in `config/tasks.d/`.
 - Edit `config/*.yaml-example` when changing shared or environment defaults. Git ignores each checkout's `config/base.yaml`, `config/dev.yaml` and `config/prod.yaml`. Document any settings operators need to apply after an update in the [configuration guide](docs/USAGE.md#configuration).
 - No network in tests. No API calls. Tests must stay fast and offline.
 - Deployment is **pull-based**: the host fetches and updates itself via
