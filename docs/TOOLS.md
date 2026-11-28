@@ -10,7 +10,8 @@ A task's `tools` list determines what its agent may use unattended. The selected
 | A daily regulatory brief needs UK results from the past week | Brave | The same operation on all three runners accepts country and freshness filters. For this case use `country: GB` and `freshness: pw` in the tool call. Check the publication date on the source itself. |
 | An operator needs to audit which URLs a search returned | Brave | With Logfire conversation capture enabled, the Brave tool span records the full result URLs, including query strings and fragments. These are the search hits. The task’s citations show which sources it used. |
 | The first search misses a known consultation, or you want a second search provider’s results | Both | Give the prompt a trigger for the second search. For example, “Use native search first. If you cannot locate the original consultation, search Brave for its title and the regulator’s name.” |
-| The task only edits or classifies existing vault notes | Neither | Leave the search grants out. Local file access and external search are separate capabilities. |
+| A research task needs search and source pages as Markdown from one third-party API | Tavily Search and Extract | Search can include Markdown in the result. Extract opens a specific URL through the same provider. |
+| The task only edits or classifies existing vault notes | Local tools only | Leave the search grants out. Local file access and external search are separate capabilities. |
 
 Brave requires `BRAVE_API_KEY`. Its tool shares rate-limit state across local runners using the same OS account and key. If Brave reports a long cooldown, the prompt can direct the model to use native search when that grant is present. Granting both gives the model a choice. Reginald does not automatically send the query to the second provider. [Brave search filters](https://api-dashboard.search.brave.com/app/documentation/web-search/query) · [Rate limits and retries](MCPSERVERS.md#brave-search-rate-limits) · [Find result URLs in Logfire](LOGGING.md#find-individual-tool-calls-in-logfire)
 
@@ -59,6 +60,40 @@ native_tool_options:
     search_context_size: high
 max_turns: 8
 ```
+
+## Tavily
+
+Set `TAVILY_API_KEY` in the process environment for local development or in `/etc/reginald/env` on the host. All three runners use the same grants. To route a task’s web research through Tavily, edit its existing `tools` list in `config/tasks.d/`. Keep the file or sandbox grants it needs, remove other search and fetch grants, and add `mcp__tavily__tavily_search` and `mcp__tavily__tavily_extract`. Check for an environment overlay that replaces the list. [Server configuration](../config/tools.d/tavily.conf) · [Configuration precedence](USAGE.md#configuration)
+
+For example, a Codex task that writes research notes can use this complete tool list.
+
+```yaml
+tools: [CodexWorkspaceWrite, mcp__tavily__tavily_search, mcp__tavily__tavily_extract]
+```
+
+| Task grant | When to use it |
+| --- | --- |
+| `mcp__tavily__tavily_search` | Find sources. Defaults to basic search and includes result pages as Markdown when available. Set `include_raw_content: false` for snippets only. |
+| `mcp__tavily__tavily_extract` | Fetch known URLs, including citations selected from search. Returns Markdown by default. Inspect `failed_results` for individual failures. |
+| `mcp__tavily__tavily_map` | Find URLs on one site before deciding which pages to read. |
+| `mcp__tavily__tavily_crawl` | Discover and read pages together. Set `limit` to bound the crawl. |
+| `mcp__tavily__tavily_research` | Start a separately billed research job. Save its `request_id`. The optional `stream: true` mode holds the call open and returns the collected Tavily events on completion. |
+| `mcp__tavily__tavily_research_status` | Pass the saved `request_id` to check progress or collect the final report. |
+| `mcp__tavily__tavily_usage` | Read current key and account credit usage, optionally scoped to a project. |
+| `mcp__tavily__tavily_logs` | Read per-request usage logs on a paid plan. Set `filter_by_api_key: true` to scope the results to the current key. |
+| `mcp__tavily__tavily_feedback` | Send ratings or comments about a previous search request or session to Tavily. |
+
+After editing the task, check the merged grants on the installed host.
+
+```bash
+sudo reginald task list
+```
+
+The task’s row should show both Tavily operation names. Listing tasks does not call Tavily. At run time, a missing `TAVILY_API_KEY` stops the selected server at startup.
+
+For routine briefs, grant Search and Extract individually. Use the Markdown already returned by Search when it contains the passage you need. A separate Extract call consumes its own credits. Crawl and Research can spend multiple credits per call. Set a credit limit in Tavily for the research key. Reginald’s model budget tracks runner costs separately. HTTP failures are reported to the runner with the status and any `Retry-After` header. The integration makes one request per call. [Tavily credits and limits](https://docs.tavily.com/documentation/api-credits) · [API reference](https://docs.tavily.com/documentation/api-reference/endpoint/search)
+
+Tavily describes provider-side prompt-injection protection. Its public API does not expose a per-page screening verdict for Reginald to verify. Treat snippets, Markdown and reports as external source material. The Search option `safe_search` filters adult or unsafe content. [Tavily security overview](https://www.tavily.com/blog/tavily-101-ai-powered-search-for-developers) · [Search parameters](https://docs.tavily.com/documentation/api-reference/endpoint/search)
 
 ## MCP grants and validation
 

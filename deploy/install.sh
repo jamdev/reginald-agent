@@ -227,6 +227,8 @@ ANTHROPIC_API_KEY=sk-ant-REPLACE-ME
 # OPENROUTER_API_KEY=
 POSTMARK_SERVER_TOKEN=REPLACE-ME
 BRAVE_API_KEY=REPLACE-ME
+# Optional for tasks with Tavily MCP grants.
+# TAVILY_API_KEY=
 # prod.yaml sets logfire.enabled: true — uncomment to ship traces, otherwise
 # observability stays a logged no-op.
 # LOGFIRE_TOKEN=REPLACE-ME

@@ -58,7 +58,7 @@ Reginald runs his tasks to a schedule:
 
 Reginald includes tool support using MCP servers.
 
-For example, Reginald can use Brave Search alongside Claude’s built-in web search. Each task lists the tools it may use unattended. 
+Reginald supports Tavily for web search and Markdown retrieval across all three runners. Tasks can also select native search or Brave Search. Each task lists the tools it may use unattended.
 
 ### Hosting
 
@@ -194,7 +194,7 @@ Some notes on information security:
 
 - [Configure Claude, Pydantic AI and Codex task runners](docs/RUNNERS.md)
 
-- [Choose native tools, Brave Search and task grants](docs/TOOLS.md)
+- [Choose native tools, Brave Search, Tavily and task grants](docs/TOOLS.md)
 - [Add MCP servers and grant tools to tasks](docs/MCPSERVERS.md)
 
 - [Inspect a run in the journal or Logfire](docs/LOGGING.md)

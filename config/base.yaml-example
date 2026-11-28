@@ -1,6 +1,7 @@
 # Copy config/base.yaml-example to config/base.yaml to initialise shared settings.
 # Reginald reads base.yaml first, then automatically loads every
-# .yaml and .yml file directly inside tools.d/ and tasks.d/. The filename supplies the name.
+# .yaml and .yml file directly inside tools.d/ and tasks.d/, plus .conf files in tools.d/.
+# All definitions use YAML. The filename supplies the name.
 # dev.yaml or prod.yaml is applied last. Mappings merge by key. A list override replaces the whole list.
 
 vault_path: ~/vaults/agentic-gc          # override per environment

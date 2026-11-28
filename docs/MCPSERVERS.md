@@ -1,6 +1,6 @@
 # MCP servers
 
-Reginald uses the Model Context Protocol (MCP) for Brave Search and for filing Inbox notes. Only the shipped `triage-inbox` task grants the `inbox` server's `move_file` operation. It accepts two vault-relative paths, preserves the file's contents, and refuses an existing destination. [Inbox workflow](USAGE.md#filing-inbox-notes) · [Inbox server definition](../config/tools.d/inbox.yaml) · [Brave server definition](../config/tools.d/brave-search.yaml)
+Reginald uses the Model Context Protocol (MCP) for Brave Search, Tavily and filing Inbox notes. Only the shipped `triage-inbox` task grants the `inbox` server's `move_file` operation. It accepts two vault-relative paths, preserves the file's contents, and refuses an existing destination. [Inbox workflow](USAGE.md#filing-inbox-notes) · [Inbox server definition](../config/tools.d/inbox.yaml) · [Brave server definition](../config/tools.d/brave-search.yaml)
 
 ## How an agent chooses a tool
 
@@ -18,13 +18,17 @@ After HTTP 429, the tool retries up to three times, waiting at least one, two an
 
 The shipped connection pins the Brave server version and preloads the limiter through its Node.js arguments. Keep the shipped `args` when overriding the path to `npx`. The `{package_uri}` placeholder resolves to the installed Reginald package’s file URI. [Brave server definition](../config/tools.d/brave-search.yaml)
 
+## Tavily
+
+The bundled Tavily server uses stdio with Claude, Codex and Pydantic AI. It authenticates to `https://api.tavily.com` using the key in `TAVILY_API_KEY`. Tavily performs the searches and fetches the target URLs on its infrastructure. Registering the server makes its operations available for task grants. The process starts only for a task that selects it. [Server definition](../config/tools.d/tavily.conf) · [Endpoint grants and examples](TOOLS.md#tavily)
+
 ## Add another MCP server
 
 All three runners support local stdio processes and Streamable HTTP endpoints. To add a compatible server, register its connection and grant its operations to the tasks that need them. The following example gives the development `source-verification` task access to Microsoft Learn search so it can locate a moved Microsoft documentation page.
 
 ### 1. Register the connection
 
-Create `config/tools.d/microsoft-learn.yaml` with the following contents. Each `.yaml` or `.yml` file directly in that directory defines one server. Its filename stem supplies the server name used by task grants. Microsoft publishes this endpoint and its operation names. [Microsoft Learn MCP reference](https://learn.microsoft.com/en-us/training/support/mcp-developer-reference)
+Create `config/tools.d/microsoft-learn.yaml` with the following contents. Each `.yaml`, `.yml` or `.conf` file directly in that directory defines one server using YAML syntax. Its filename stem supplies the server name used by task grants. Microsoft publishes this endpoint and its operation names. [Microsoft Learn MCP reference](https://learn.microsoft.com/en-us/training/support/mcp-developer-reference)
 
 ```yaml
 transport: http

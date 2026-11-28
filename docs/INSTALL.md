@@ -146,7 +146,7 @@ Run `timedatectl status` again to verify the local time and, once the time sourc
 sudoedit /etc/reginald/env
 ```
 
-Replace the installer placeholders. For the shipped tasks, set `ANTHROPIC_API_KEY` for API billing or `CLAUDE_CODE_OAUTH_TOKEN` for a subscription. Remove the example API key line when using the subscription token because the API key takes precedence. Set `BRAVE_API_KEY` for Brave search and `POSTMARK_SERVER_TOKEN` for Postmark delivery. Other runners have their own credential requirements. [Provider credentials](USAGE.md#secrets) · [Runner authentication](RUNNERS.md#checking-runner-credentials)
+Replace the installer placeholders. For the shipped tasks, set `ANTHROPIC_API_KEY` for API billing or `CLAUDE_CODE_OAUTH_TOKEN` for a subscription. Remove the example API key line when using the subscription token because the API key takes precedence. Set `BRAVE_API_KEY` for Brave search and `POSTMARK_SERVER_TOKEN` for Postmark delivery. For tasks that select Tavily, add `TAVILY_API_KEY` to this file. [Tavily operations and grants](TOOLS.md#tavily) Other runners have their own credential requirements. [Provider credentials](USAGE.md#secrets) · [Runner authentication](RUNNERS.md#checking-runner-credentials)
 
 Use `sudo reginald` for CLI commands on the host. The wrapper enters the application directory, loads the protected environment file and runs the CLI as the service user with the production configuration.
 

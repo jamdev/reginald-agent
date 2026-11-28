@@ -105,7 +105,7 @@ For a new checkout, copy the three `config/*.yaml-example` templates to `config/
 Reginald reads configuration in this order on each invocation.
 
 1. `config/base.yaml` supplies shared defaults.
-2. Every `.yaml` or `.yml` file directly inside `config/tools.d/` or `config/tasks.d/` registers one MCP server or one task. The filename without its extension supplies the name. Put the definition's fields at the top of the file. Use a unique filename stem within each directory. Existing inline definitions in `base.yaml` also load, and the discovered file takes precedence for any fields both define.
+2. Every `.yaml` or `.yml` file directly inside `config/tools.d/` or `config/tasks.d/` registers one MCP server or one task. The tool directory also accepts YAML mappings with a `.conf` extension, including the shipped Tavily connection. The filename without its extension supplies the name. Put the definition's fields at the top of the file. Use a unique filename stem within each directory. Existing inline definitions in `base.yaml` also load, and the discovered file takes precedence for any fields both define.
 3. `config/dev.yaml` or `config/prod.yaml` overrides fields for the selected environment. Use the filename stem as the key under `tools` or `tasks`.
 
 If you override the triage task’s tool list, include `mcp__inbox__move_file` after updating. [Filing Inbox notes](#filing-inbox-notes)
@@ -172,6 +172,7 @@ Never in YAML. Read from the process environment:
 | `OPENAI_API_KEY` | Codex runs with API billing and Pydantic AI tasks using the OpenAI API directly. Codex also accepts a service-user login. |
 | `OPENROUTER_API_KEY` | Pydantic AI tasks using an `openrouter:` model. |
 | `POSTMARK_SERVER_TOKEN` | Sending email with `provider: postmark`. |
+| `TAVILY_API_KEY` | Required when a task grants a Tavily operation. On an existing host, add the key to `/etc/reginald/env` before granting the tool in `config/tasks.d/`. [Operations and grants](TOOLS.md#tavily) |
 | `BRAVE_API_KEY` | Brave web search in `research-new-developments`, `update-trackers` and `action-edits`. Claude’s built-in `WebSearch` uses the Claude credential. |
 | `LOGFIRE_TOKEN` | Shipping traces when `logfire.enabled`. Must match `logfire.base_url`'s instance. |
 

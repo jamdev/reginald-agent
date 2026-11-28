@@ -1,0 +1,201 @@
+# MCP inputs derived from Tavily’s standard API request schemas.
+# Source: https://docs.tavily.com/documentation/api-reference/endpoint/search
+
+search:
+  description: Find sources on the web. Defaults to basic search with result pages in Markdown.
+  required: [query]
+  properties:
+    query: {type: string}
+    search_depth: {type: string, enum: [advanced, basic, fast, ultra-fast]}
+    chunks_per_source: {type: integer, minimum: 1, maximum: 3}
+    max_results: {type: integer, minimum: 0, maximum: 20}
+    topic: {type: string, enum: [general, news, finance]}
+    time_range: {type: string, enum: [day, week, month, year, d, w, m, y]}
+    start_date: {type: string}
+    end_date: {type: string}
+    include_published_date: {type: boolean}
+    filter_by_published_date: {type: boolean}
+    max_age_hours: {type: integer, minimum: -1, maximum: 720}
+    include_answer: {oneOf: [{type: boolean}, {type: string, enum: [basic, advanced]}]}
+    include_raw_content: {oneOf: [{type: boolean}, {type: string, enum: [markdown, text]}]}
+    include_images: {type: boolean}
+    include_image_descriptions: {type: boolean}
+    include_favicon: {type: boolean}
+    include_domains: {type: array, items: {type: string}}
+    exclude_domains: {type: array, items: {type: string}}
+    include_domains_mode: {type: string, enum: [restrict, prefer]}
+    country: {type: string, description: 'Full country name in lowercase (for example, united kingdom).'}
+    language: {type: string}
+    filter_by_language: {type: boolean}
+    auto_parameters: {type: boolean}
+    exact_match: {type: boolean}
+    include_usage: {type: boolean}
+    safe_search: {type: boolean, description: Adult and unsafe content filter for basic or advanced search.}
+
+extract:
+  description: Fetch one or more known URLs through Tavily. Returns Markdown by default and identifies failed URLs.
+  required: [urls]
+  properties:
+    urls: {oneOf: [{type: string}, {type: array, items: {type: string}, minItems: 1, maxItems: 20}]}
+    query: {type: string}
+    chunks_per_source: {type: integer, minimum: 1, maximum: 5}
+    extract_depth: {type: string, enum: [basic, advanced]}
+    include_images: {type: boolean}
+    include_favicon: {type: boolean}
+    include_published_date: {type: boolean}
+    format: {type: string, enum: [markdown, text]}
+    timeout: {type: number, format: float, minimum: 1, maximum: 60}
+    include_usage: {type: boolean}
+
+map:
+  description: Discover URLs within a website. Use limit to bound the number of results.
+  required: [url]
+  properties:
+    url: {type: string}
+    instructions: {type: string}
+    max_depth: {type: integer, minimum: 1, maximum: 5}
+    max_breadth: {type: integer, minimum: 1, maximum: 500}
+    limit: {type: integer, minimum: 1}
+    select_paths: {type: array, items: {type: string}}
+    select_domains: {type: array, items: {type: string}}
+    exclude_paths: {type: array, items: {type: string}}
+    exclude_domains: {type: array, items: {type: string}}
+    allow_external: {type: boolean}
+    timeout: {type: number, format: float, minimum: 10, maximum: 150}
+    include_usage: {type: boolean}
+
+crawl:
+  description: Discover pages and extract their contents. Defaults to Markdown. Use limit to bound the crawl.
+  required: [url]
+  properties:
+    url: {type: string}
+    instructions: {type: string}
+    chunks_per_source: {type: integer, minimum: 1, maximum: 5}
+    max_depth: {type: integer, minimum: 1, maximum: 5}
+    max_breadth: {type: integer, minimum: 1, maximum: 500}
+    limit: {type: integer, minimum: 1}
+    select_paths: {type: array, items: {type: string}}
+    select_domains: {type: array, items: {type: string}}
+    exclude_paths: {type: array, items: {type: string}}
+    exclude_domains: {type: array, items: {type: string}}
+    allow_external: {type: boolean}
+    include_images: {type: boolean}
+    extract_depth: {type: string, enum: [basic, advanced]}
+    format: {type: string, enum: [markdown, text]}
+    include_favicon: {type: boolean}
+    timeout: {type: number, format: float, minimum: 10, maximum: 150}
+    include_usage: {type: boolean}
+
+research:
+  description: Start a billable research job. Save the request_id and use tavily_research_status for progress and results. With stream enabled, the call returns the collected events on completion.
+  required: [input]
+  properties:
+    input: {type: string, description: Research question to investigate.}
+    model: {type: string, enum: [mini, pro, auto]}
+    stream: {type: boolean}
+    output_schema:
+      type: object
+      properties:
+        properties:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [object, string, integer, number, array]
+              description: {type: string}
+              properties: {type: object}
+              items: {type: object}
+            required: [type, description]
+        required:
+          type: array
+          items: {type: string}
+    citation_format: {type: string, enum: [numbered, mla, apa, chicago]}
+    include_domains: {type: array, items: {type: string}, maxItems: 20}
+    exclude_domains: {type: array, items: {type: string}, maxItems: 20}
+    output_length: {type: string, enum: [short, standard, long]}
+    files:
+      type: array
+      maxItems: 5
+      items:
+        type: object
+        properties:
+          name: {type: string}
+          data: {type: string}
+          type:
+            type: string
+            enum: [base64]
+        required: [name, data]
+
+research_status:
+  description: Retrieve progress or the completed report by request_id without starting a new research job.
+  required: [request_id]
+  properties:
+    request_id: {type: string, pattern: '^[a-zA-Z0-9_-]+$'}
+    include_usage: {type: boolean}
+
+feedback:
+  description: Send feedback to Tavily about a previous search. Supply a request_id or session_id.
+  properties:
+    request_id: {type: string, maxLength: 200}
+    session_id: {type: string, maxLength: 200}
+    agent_score: {oneOf: [{type: number}, {type: string, maxLength: 64}]}
+    human_score: {oneOf: [{type: number}, {type: string, maxLength: 64}]}
+    extra_scores:
+      type: array
+      maxItems: 50
+      items:
+        type: object
+        required: [label, value]
+        properties:
+          label: {type: string, maxLength: 64}
+          value:
+            oneOf:
+            - {type: number}
+            - {type: string, maxLength: 64}
+    comment: {type: string, maxLength: 10000}
+    response_delivered: {type: string, maxLength: 50000}
+    used_ids: {type: array, maxItems: 100, items: {type: string, maxLength: 200}}
+    used_urls: {type: array, maxItems: 100, items: {type: string, maxLength: 2000}}
+    used_citations: {type: array, maxItems: 100, items: {type: string, maxLength: 2000}}
+    urls_scores:
+      type: array
+      maxItems: 100
+      items:
+        type: object
+        properties:
+          id: {type: string, maxLength: 200}
+          url: {type: string, maxLength: 2000}
+          agent_score:
+            oneOf:
+            - {type: number}
+            - {type: string, maxLength: 64}
+          scores:
+            type: array
+            maxItems: 20
+            items:
+              type: object
+              required: [label, value]
+              properties:
+                label: {type: string, maxLength: 64}
+                value:
+                  oneOf:
+                  - {type: number}
+                  - {type: string, maxLength: 64}
+          comment: {type: string, maxLength: 2000}
+
+usage:
+  description: Inspect current API key and account credit usage. Optionally scope usage to a project.
+  properties:
+    project_id: {type: string, pattern: '^[^\r\n]+$'}
+
+logs:
+  description: Retrieve per-request usage logs. Requires a paid Tavily plan.
+  properties:
+    limit: {type: integer, minimum: 1, maximum: 10000}
+    start_date: {type: string, format: date}
+    end_date: {type: string, format: date}
+    endpoints: {type: array, items: {type: string, enum: [search, extract, map, crawl, research]}}
+    project_id: {type: string}
+    filter_by_api_key: {type: boolean}

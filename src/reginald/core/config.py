@@ -266,13 +266,13 @@ def _read_mapping(path: Path) -> dict:
     return data
 
 
-def _load_definitions(directory: Path) -> dict[str, dict]:
+def _load_definitions(directory: Path, extensions: set[str]) -> dict[str, dict]:
     """Each YAML file defines one entry. Its filename supplies the registry key."""
     definitions: dict[str, dict] = {}
     if not directory.exists():
         return definitions
     for path in sorted(directory.iterdir()):
-        if path.suffix.lower() not in {".yaml", ".yml"} or not path.is_file():
+        if path.suffix.lower() not in extensions or not path.is_file():
             continue
         if path.stem in definitions:
             raise ValueError(f"Duplicate definition {path.stem!r} in {directory}. Use one YAML file per name.")
@@ -305,8 +305,8 @@ def load_config(
     overlay_file = config_dir / f"{env}.yaml"
 
     data = _read_mapping(base_file) if base_file.exists() else {}
-    for registry in ("tools", "tasks"):
-        definitions = _load_definitions(config_dir / f"{registry}.d")
+    for registry, extensions in (("tools", {".yaml", ".yml", ".conf"}), ("tasks", {".yaml", ".yml"})):
+        definitions = _load_definitions(config_dir / f"{registry}.d", extensions)
         if definitions:
             data = _deep_merge(data, {registry: definitions})
     # Apply the selected environment last so it can override individual fields
