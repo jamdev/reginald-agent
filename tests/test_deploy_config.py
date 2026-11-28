@@ -75,7 +75,7 @@ def test_deploy_preserves_settings_across_releases(deployment):
     (host / CONFIGS[0]).write_text("operator override\n")
     (host / CONFIGS[1]).chmod(0o600)
     for ref, expected, changed in [
-        ((), "v2", ["config/base.yaml-example"]),
+        (("v2",), "v2", ["config/base.yaml-example"]),
         (("main",), "origin/main", ["config/prod.yaml-example"]),
         (("main",), "origin/main", []),
         (("v1",), "v1", ["config/base.yaml-example", "config/prod.yaml-example"]),
@@ -111,3 +111,54 @@ def test_deploy_keeps_unrelated_checkout_conflicts_and_staged_settings(deploymen
     assert git(host, "rev-parse", "HEAD") == git(host, "rev-parse", "v1")
     assert (host / CONFIGS[0]).read_text() == "working setting\n"
     assert (host / "code").read_text() == "operator code edit\n"
+
+
+def test_no_argument_tracks_branch_updates_and_remembers_tag_switch(deployment):
+    host, update = deployment
+    origin = host.parent / "origin"
+    git(origin, "switch", "-qc", "1.1.0-dev")
+
+    # The installer leaves a fresh clone on its current branch.
+    assert update().returncode == 42
+    assert git(host, "rev-parse", "HEAD") == git(origin, "rev-parse", "main")
+    assert update("1.1.0-dev").returncode == 42
+    git(origin, "commit", "--allow-empty", "-qm", "Next development commit")
+    assert update().returncode == 42
+    assert git(host, "rev-parse", "HEAD") == git(origin, "rev-parse", "1.1.0-dev")
+
+    assert update("v2").returncode == 42
+    git(origin, "tag", "v3")
+    git(origin, "branch", "v2", "HEAD")  # A later branch with the same name.
+    assert update().returncode == 42
+    assert git(host, "rev-parse", "HEAD") == git(origin, "rev-parse", "refs/tags/v2")
+
+
+def test_legacy_detached_checkout_remembers_branch_before_fetch(deployment):
+    host, update = deployment
+    origin = host.parent / "origin"
+    git(host, "fetch", "origin")
+    git(host, "checkout", "--detach", "origin/main")
+    git(origin, "commit", "--allow-empty", "-qm", "Branch advanced since installation")
+    assert update().returncode == 42
+    assert git(host, "rev-parse", "HEAD") == git(origin, "rev-parse", "main")
+
+
+def test_ambiguous_legacy_checkout_requires_explicit_choice(deployment):
+    host, update = deployment
+    git(host, "checkout", "--detach", "v1")  # Cached origin/main and v1 coincide.
+    result = update()
+    assert result.returncode not in (0, 42)
+    assert "pass a branch or tag" in result.stderr
+    assert git(host, "rev-parse", "HEAD") == git(host, "rev-parse", "v1")
+
+
+def test_missing_remembered_branch_fails_without_switching(deployment):
+    host, update = deployment
+    origin = host.parent / "origin"
+    git(origin, "branch", "temporary", "v1")
+    assert update("temporary").returncode == 42
+    git(origin, "branch", "-D", "temporary")
+    git(origin, "tag", "temporary", "v2")
+    result = update()
+    assert result.returncode not in (0, 42)
+    assert git(host, "rev-parse", "HEAD") == git(origin, "rev-parse", "v1")

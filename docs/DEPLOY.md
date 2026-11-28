@@ -74,11 +74,13 @@ For hosts using Brave Search, run the following check before updating. It should
 node -p "typeof require('node:sqlite').DatabaseSync"
 ```
 
-Once the backup checks out, run the updater on the host. With no argument, it selects the highest Git tag in version order. GitHub’s **Pre-release** label does not exclude a tag from deployment.
+Once the backup checks out, run the updater on the host. With no arguments, it fetches from `origin` and reapplies the current deployment. A branch follows its latest commit. A release tag stays selected until you explicitly select another tag or branch. Even when the commit is unchanged, the updater runs the installation steps again.
 
 ```bash
 sudo /opt/reginald/deploy/update.sh
 ```
+
+On a fresh clone the updater follows the checked-out branch on `origin`. After checkout it records the selected ref and commit in the application’s local Git configuration, so a retry after an interrupted install uses the same target. On an older detached checkout with no matching record, it checks which cached origin branch or tag points to the installed commit before fetching. If several refs match, none match, or the selected ref has disappeared from origin, pass the intended branch or tag explicitly.
 
 On upgrading to conversation capture, hosts with Logfire enabled start exporting up to 100 characters per conversation field. To choose another limit or disable capture for the first run after updating, set `logfire.capture_chars` in the host overlay before updating. [Conversation settings](LOGGING.md#read-the-agent-conversation)
 
@@ -100,7 +102,7 @@ systemctl list-timers 'reginald-*'
 
 The updater should finish with `deployed v1.0.2`, and the CLI should report `1.0.2`.
 
-To install Tavily from the development branch, pass the branch name on each update. The updater checks out the tracked tool definitions in `/opt/reginald/config/tools.d/`. Run these commands on the host. The last command displays the installed connection and the name of its environment variable.
+To select the Tavily development branch, pass its name explicitly. Use this command for the first update from a host running the older updater, which defaults to the newest tag. Once the new updater knows the branch, subsequent updates need no arguments. The updater checks out the tracked tool definitions in `/opt/reginald/config/tools.d/`. Run these commands on the host. The last command displays the installed connection and the name of its environment variable.
 
 ```bash
 sudo /opt/reginald/deploy/update.sh 1.1.0-dev
@@ -109,7 +111,7 @@ cat /opt/reginald/config/tools.d/tavily.yaml
 
 If the host sets `REGINALD_CONFIG_DIR` to a separate configuration tree, place the YAML definition in that tree’s `tools.d/` as well. [Tavily credentials and task grants](TOOLS.md#tavily)
 
-To deploy unreleased work from the main branch, run `sudo /opt/reginald/deploy/update.sh main`. The update starts with the script already installed on the host. If a release changes the updater's installation steps, rerun the command after checkout to apply those steps.
+To deploy unreleased work from the main branch, run `sudo /opt/reginald/deploy/update.sh main`. Each invocation uses the script currently installed on the host. Deploying a revision with the older updater restores its no-argument behaviour of selecting the newest tag. If a release changes the updater's installation steps, rerun the command after checkout to apply those steps.
 
 ### Rolling back
 

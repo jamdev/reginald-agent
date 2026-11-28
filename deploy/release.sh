@@ -7,7 +7,7 @@
 #   ./deploy/release.sh 1.0.2 --force # finish releasing the current version
 #
 # Run from your workstation, on main, with a clean tree. Deploying the result is a
-# separate step on the host: sudo /opt/reginald/deploy/update.sh
+# separate step on the host. Pass the newly published tag to deploy/update.sh.
 #
 # The version lives in pyproject.toml and is what `reginald --version` reports,
 # so a tag without the matching bump makes the running system misreport which

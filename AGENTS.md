@@ -270,6 +270,9 @@ Do not "fix" these without asking:
 - **Escalation numbers are assigned only by sync**, never in filenames.
   Filenames are date-slug (`YYYY-MM-DD - slug.md`) so two clones can't collide;
   `number:` is filled by `EscalationService`. Don't put ESC-NNN in a path.
+- **With no arguments, `update.sh` reapplies the selected tag or follows the
+  selected branch on `origin`.** Passing a branch or tag explicitly switches
+  the deployment target. [Deployment guide](docs/DEPLOY.md#deploy-the-update)
 - **`update.sh` installs new timer units but does not enable them.** A deploy
   should not start firing jobs nobody asked for.
 - **Deletions raise no content events**, and malformed frontmatter does not drop

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy a release on this host. Run it here, not over `ssh <host> ...`.
 #
-#   update.sh            # newest tag on origin
+#   update.sh            # reapply the current tag or update the selected branch
 #   update.sh v0.2.0     # a specific tag (also how you roll back)
 #   update.sh main       # a branch, for testing unreleased work
 set -euo pipefail
@@ -19,26 +19,59 @@ command -v uv >/dev/null 2>&1 || { echo "uv not found — run install.sh first" 
 
 cd "$APP_DIR"
 
+previous=$(git rev-parse HEAD)
+if [ -z "$REF" ]; then
+    # Fresh installs are ordinary clones. Older updaters detached HEAD without
+    # recording a name. Inspect cached refs before fetch advances a branch tip.
+    if branch=$(git symbolic-ref -q HEAD); then
+        deploy_ref=$(git for-each-ref --format='%(upstream)' "$branch")
+        deploy_ref=${deploy_ref:-refs/remotes/origin/${branch#refs/heads/}}
+        if [[ "$deploy_ref" != refs/remotes/origin/* ]]; then
+            echo "Current branch tracks $deploy_ref. Please pass a branch or tag from origin." >&2
+            exit 1
+        fi
+    elif saved=$(git config --local --get reginald.deployment) && [[ ${saved%% *} == "$previous" ]]; then
+        deploy_ref=${saved#* }
+    else
+        deploy_ref=$(git for-each-ref --points-at="$previous" --format='%(refname)' \
+            refs/tags refs/remotes/origin | sed '/^refs\/remotes\/origin\/HEAD$/d')
+        if [[ -z "$deploy_ref" || "$deploy_ref" == *$'\n'* ]]; then
+            echo "Cannot identify a unique deployment for detached HEAD at $previous. Please pass a branch or tag." >&2
+            exit 1
+        fi
+    fi
+fi
+
 echo ">>> fetching from origin"
 # --prune-tags so a retagged release does not resolve to the stale local object.
 git fetch --tags --prune --prune-tags origin
 
-if [ -z "$REF" ]; then
-    # Newest by version order rather than commit date: tags are the release
-    # record here, and v0.10.0 must sort above v0.9.0.
-    REF="$(git tag --sort=-v:refname | head -n1)"
-    [ -n "$REF" ] || { echo "no tags on origin — pass a branch, e.g. $0 main" >&2; exit 1; }
-    echo "    newest tag: $REF"
+if [ -n "$REF" ]; then
+    # Preserve branch-before-tag lookup for short names. Store the qualified
+    # name so a later collision cannot change what a no-argument update follows.
+    if git show-ref --verify --quiet "refs/remotes/origin/$REF"; then
+        deploy_ref="refs/remotes/origin/$REF"
+    elif git show-ref --verify --quiet "refs/tags/$REF"; then
+        deploy_ref="refs/tags/$REF"
+    else
+        case "$REF" in
+            refs/remotes/origin/*|refs/tags/*) deploy_ref="$REF" ;;
+            origin/*) deploy_ref="refs/remotes/$REF" ;;
+            *) deploy_ref=$(git rev-parse --verify --end-of-options "$REF^{commit}") ;;
+        esac
+    fi
 fi
 
-echo ">>> checking out $REF"
-# Resolve tags and remote branches to one commit before touching the index.
-target="$REF"
-if git show-ref --verify --quiet "refs/remotes/origin/$REF"; then
-    target="refs/remotes/origin/$REF"
+target=$(git rev-parse --verify --end-of-options "$deploy_ref^{commit}") || {
+    echo "Cannot resolve deployment target $deploy_ref after fetching origin. Please pass a branch or tag." >&2
+    exit 1
+}
+# Keep the existing human-readable label when the operator supplied one.
+if [ -z "$REF" ]; then
+    REF=${deploy_ref#refs/remotes/origin/}
+    REF=${REF#refs/tags/}
 fi
-target=$(git rev-parse --verify --end-of-options "$target^{commit}")
-previous=$(git rev-parse HEAD)
+echo ">>> checking out $REF ($target)"
 
 # Older releases tracked these files. Make their index entries match the target
 # so checkout leaves each existing working copy in place in either direction.
@@ -66,6 +99,10 @@ if ! git checkout -q --detach "$target"; then
     fi
     exit 1
 fi
+# Save the checked-out commit and target together. A retry after a dependency
+# or migration failure continues this selection. A manual move to a different
+# commit invalidates the saved selection.
+git config --local reginald.deployment "$target $deploy_ref"
 git --no-pager log -1 --format='    %h %s'
 echo "WARNING: Review $APP_DIR/docs/DEPLOY.md (Updating) and $APP_DIR/docs/USAGE.md (Configuration) for settings to apply to your local YAML files." >&2
 git diff --name-only "$previous" "$target" -- 'config/*.yaml-example' | sed 's/^/    Changed template: /' >&2
