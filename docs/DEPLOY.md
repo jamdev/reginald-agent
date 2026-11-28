@@ -100,6 +100,15 @@ systemctl list-timers 'reginald-*'
 
 The updater should finish with `deployed v1.0.2`, and the CLI should report `1.0.2`.
 
+To install Tavily from the development branch, pass the branch name on each update. The updater checks out the tracked tool definitions in `/opt/reginald/config/tools.d/`. Run these commands on the host. The last command displays the installed connection and the name of its environment variable.
+
+```bash
+sudo /opt/reginald/deploy/update.sh 1.1.0-dev
+cat /opt/reginald/config/tools.d/tavily.yaml
+```
+
+If the host sets `REGINALD_CONFIG_DIR` to a separate configuration tree, place the YAML definition in that tree’s `tools.d/` as well. [Tavily credentials and task grants](TOOLS.md#tavily)
+
 To deploy unreleased work from the main branch, run `sudo /opt/reginald/deploy/update.sh main`. The update starts with the script already installed on the host. If a release changes the updater's installation steps, rerun the command after checkout to apply those steps.
 
 ### Rolling back

@@ -24,7 +24,7 @@ config/
   dev.yaml-example     Template for development overrides
   prod.yaml-example    Template for production overrides
   tasks.d/             One YAML file per task
-  tools.d/             One YAML mapping per MCP server (.conf, .yaml or .yml)
+  tools.d/             One YAML mapping per MCP server (.yaml or .yml)
 
 deploy/                Host installation, deploy keys, updates, CLI wrapper and releases
   systemd/             Service units and their timers

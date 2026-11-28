@@ -16,6 +16,7 @@ def config_dir(tmp_path):
 
 def test_discovers_definitions_by_filename(config_dir):
     (config_dir / "tools.d/catalog.yml").write_text("command: catalog\n")
+    (config_dir / "tools.d/catalog.conf").write_text("unrelated configuration\n")
     (config_dir / "tasks.d/lookup.yaml").write_text(
         "title: Look up a record\nrunner: claude-agent\nmodel: test\ntools: [Read, mcp__catalog__lookup]\n"
     )

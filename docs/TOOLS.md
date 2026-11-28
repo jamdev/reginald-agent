@@ -63,7 +63,7 @@ max_turns: 8
 
 ## Tavily
 
-Set `TAVILY_API_KEY` in the process environment for local development or in `/etc/reginald/env` on the host. All three runners use the same grants. To route a task’s web research through Tavily, edit its existing `tools` list in `config/tasks.d/`. Keep the file or sandbox grants it needs, remove other search and fetch grants, and add `mcp__tavily__tavily_search` and `mcp__tavily__tavily_extract`. Check for an environment overlay that replaces the list. [Server configuration](../config/tools.d/tavily.conf) · [Configuration precedence](USAGE.md#configuration)
+Set `TAVILY_API_KEY` in the process environment for local development or in `/etc/reginald/env` on the host. All three runners use the same grants. To route a task’s web research through Tavily, edit its existing `tools` list in `config/tasks.d/`. Keep the file or sandbox grants it needs, remove other search and fetch grants, and add `mcp__tavily__tavily_search` and `mcp__tavily__tavily_extract`. Check for an environment overlay that replaces the list. [Server configuration](../config/tools.d/tavily.yaml) · [Configuration precedence](USAGE.md#configuration)
 
 For example, a Codex task that writes research notes can use this complete tool list.
 
