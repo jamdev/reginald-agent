@@ -55,6 +55,7 @@ class CodexAgentRunner:
             "vault": str(vault_path.resolve()), "prompt": prompt, "model": task.model,
             "capture_chars": conversation.limit,
             "write": "CodexWorkspaceWrite" in task.tools,
+            "web_search": "live" if "web_search" in task.tools else "disabled",
             "operations": {k: sorted(v) for k, v in operations.items()},
             "servers": {k: tools[k].model_dump(mode="json") for k in operations},
         }
@@ -93,15 +94,19 @@ class CodexAgentRunner:
                             if self.log_turns:
                                 logger.info("[%s] Codex tool: %s", task_name, event["name"])
                         case "item/completed":
-                            calls.finish(event["id"], event["status"])
+                            urls = event.get("result_urls")
+                            calls.finish(event["id"], event["status"], result_urls=urls)
                             if conversation.limit:
                                 part = {"type": "tool_call", "id": event["id"], "name": event["name"]}
                                 if "arguments" in event:
                                     part["arguments"] = event["arguments"]
                                 conversation.add("assistant", [part])
                                 if "result" in event:
-                                    conversation.add("user", [{"type": "tool_call_response", "id": event["id"],
-                                                               "name": event["name"], "result": event["result"]}])
+                                    response = {"type": "tool_call_response", "id": event["id"],
+                                                "name": event["name"], "result": event["result"]}
+                                    if urls:
+                                        response["result_urls"] = urls
+                                    conversation.add("user", [response])
                         case "message":
                             conversation.add("assistant", [event["part"]])
                         case "output":

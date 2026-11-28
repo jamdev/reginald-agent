@@ -19,6 +19,6 @@ email:
   allowlist: []
 
 logfire:
-  capture_chars: 100  # Maximum characters per conversation field. Use false to disable.
+  capture_chars: 100  # Excerpt length. Brave result URLs are captured in full. Use false to disable both.
   enabled: true
   environment: prod

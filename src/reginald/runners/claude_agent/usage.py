@@ -7,7 +7,7 @@ from contextlib import ExitStack, closing
 from typing import TYPE_CHECKING
 
 from ...core.observability import logger, record_histogram, span
-from ..conversation import Conversation, excerpt
+from ..conversation import BRAVE_WEB_SEARCH, Conversation, brave_result_urls, excerpt
 from ..tool_spans import ToolSpans
 
 if TYPE_CHECKING:
@@ -101,7 +101,7 @@ _FINISH_REASONS = {
 }
 
 
-def _message_parts(blocks, limit: int) -> list[dict]:
+def _message_parts(blocks, limit: int, tools: ToolSpans) -> list[dict]:
     from claude_agent_sdk import (
         ServerToolResultBlock, ServerToolUseBlock, TextBlock, ThinkingBlock, ToolResultBlock, ToolUseBlock,
     )
@@ -113,9 +113,18 @@ def _message_parts(blocks, limit: int) -> list[dict]:
             if limit:
                 part["arguments"] = excerpt(block.input, limit)
             parts.append(part)
-        elif limit and isinstance(block, (ToolResultBlock, ServerToolResultBlock)):
-            parts.append({"type": "tool_call_response", "id": block.tool_use_id,
-                          "result": excerpt(block.content, limit)})
+        elif isinstance(block, (ToolResultBlock, ServerToolResultBlock)):
+            urls = []
+            if isinstance(block, ToolResultBlock):
+                name = tools.names_by_id.get(block.tool_use_id, "")
+                if limit and name.startswith("mcp__") and name.endswith(f"__{BRAVE_WEB_SEARCH}"):
+                    urls = brave_result_urls(block.content)
+                tools.finish(block.tool_use_id, "failed" if block.is_error else "completed", result_urls=urls)
+            if limit:
+                part = {"type": "tool_call_response", "id": block.tool_use_id, "result": excerpt(block.content, limit)}
+                if urls:
+                    part["result_urls"] = urls
+                parts.append(part)
         elif limit and isinstance(block, TextBlock):
             parts.append({"type": "text", "content": block.text[:limit]})
         elif limit and isinstance(block, ThinkingBlock):
@@ -206,22 +215,23 @@ async def trace_model_calls(
         async for message in messages:
             if not isinstance(message, StreamEvent):
                 if isinstance(message, AssistantMessage) and not message.parent_tool_use_id:
-                    rendered = _message_parts(message.content, conversation.limit)
+                    rendered = _message_parts(message.content, conversation.limit, tools)
                     if not message.error:
                         if message.message_id == response_id and (usage is not None or response_id):
                             parts.assembled.extend(rendered)
                             parts.update_message()
                         else:
                             conversation.add("assistant", rendered)
-                elif isinstance(message, UserMessage) and conversation.limit and not message.parent_tool_use_id:
+                elif isinstance(message, UserMessage):
                     if isinstance(message.content, str):
                         user_parts = [conversation.text(message.content)]
                         # The runner already recorded the initial task prompt.
                         if len(conversation.messages) == 1 and conversation.messages[0]["parts"] == user_parts:
                             user_parts = []
                     else:
-                        user_parts = _message_parts(message.content, conversation.limit)
-                    conversation.add("user", user_parts)
+                        user_parts = _message_parts(message.content, conversation.limit, tools)
+                    if not message.parent_tool_use_id:
+                        conversation.add("user", user_parts)
                 if isinstance(message, ResultMessage):
                     active.close()
                     usage = None

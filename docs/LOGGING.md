@@ -22,6 +22,13 @@ To change production capture, run `sudoedit /opt/reginald/config/prod.yaml` and 
 
 Tool execution spans are available with `logging.agent_turns` switched off. On a Claude `chat` span, `gen_ai.output.messages` identifies the tools requested together in that response. For example, a parallel `Read` and `Grep` produce two tool spans and count as one tool-calling turn. [Logfire Agents view](https://pydantic.dev/docs/logfire/observe/agents/) · [Agent run distributions](https://pydantic.dev/docs/logfire/observe/llms/#agent-run-distributions)
 
+For Claude, Codex and Pydantic AI tasks using Brave Search, this **Live** filter finds calls that returned URLs. Select a call and expand **Attributes → `tool.result_urls`** to see each complete result URL, including its query string and fragment. The agent conversation also carries the list under `result_urls` on the matching tool response. Claude’s conversation includes main-agent calls. Any positive `logfire.capture_chars` enables full result URLs alongside the bounded text excerpt. Setting it to `false` omits both. Earlier traces retain their original excerpts.
+
+```sql
+attributes->>'gen_ai.operation.name' = 'execute_tool'
+AND attributes->'tool.result_urls' IS NOT NULL
+```
+
 ## Trace standalone commands and email
 
 In **Live**, select **prod** and use this filter to see operator commands and timer invocations, including vault scans and outbox drains that found no work.

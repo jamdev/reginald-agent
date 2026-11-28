@@ -68,6 +68,12 @@ The backup command prints `backed up to` followed by the full path. The integrit
 
 ### Deploy the update
 
+For hosts using Brave Search, run the following check before updating. It should print `function`. If it fails, upgrade Node.js to an LTS release with built-in SQLite (22.13 or later). If a host overlay sets `tools.brave-search.args` to launch the old upstream package directly, remove that field so the shipped tool can load its rate limiter. An override of `command` alone can stay. [Brave Search rate limits](MCPSERVERS.md#brave-search-rate-limits)
+
+```bash
+node -p "typeof require('node:sqlite').DatabaseSync"
+```
+
 Once the backup checks out, run the updater on the host. With no argument, it selects the highest Git tag in version order. GitHub’s **Pre-release** label does not exclude a tag from deployment.
 
 ```bash
@@ -76,7 +82,13 @@ sudo /opt/reginald/deploy/update.sh
 
 On upgrading to conversation capture, hosts with Logfire enabled start exporting up to 100 characters per conversation field. To choose another limit or disable capture for the first run after updating, set `logfire.capture_chars` in the host overlay before updating. [Conversation settings](LOGGING.md#read-the-agent-conversation)
 
+On the next real run, task grants are checked against the selected runner and its connected MCP servers. Correct any stale grant named in a startup error. Existing Codex tasks can opt into live native search by adding `web_search` alongside their sandbox grant. [Tool grants and search examples](TOOLS.md)
+
+After updating, all three runners export complete Brave Search result URLs to Logfire when conversation capture is enabled. The existing `capture_chars: false` setting keeps these URLs out of telemetry. [View search result URLs](LOGGING.md#find-individual-tool-calls-in-logfire)
+
 The updater installs the locked dependencies, backs up and migrates the database, refreshes the wrapper and units, restarts active timers and runs `doctor`. Check the release row for the version and tag you intended. Review any `Changed template` lines and apply the relevant settings to your host's YAML files. New timers need to be enabled individually. [Configuration](USAGE.md#configuration) · [Enabling timers](TIMERS.md#enabling)
+
+When enabling Codex on an existing Ubuntu host, [verify the Codex sandbox](INSTALL.md#verify-the-codex-sandbox). The one-time installer provisions Bubblewrap and its AppArmor profile. The linked check and repair also work on hosts provisioned with an older installer.
 
 To deploy a specific tag, for example `v1.0.2`, use this command instead. After the updater finishes, verify the installed version and active schedules.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -15,6 +16,20 @@ def check_sdk(module: str) -> DoctorCheck:
     installed = importlib.util.find_spec(module) is not None
     return DoctorCheck(name=f"module {module}", ok=installed,
                        detail="installed" if installed else "Install the reginald[agents] extra")
+
+
+def validate_tool_grants(source: str, requested: Iterable[str], advertised: Iterable[str]) -> None:
+    names = set(advertised)
+    missing = []
+    for grant in requested:
+        if grant.endswith("__*"):
+            if any(name.startswith(grant[:-1]) for name in names):
+                continue
+        elif grant in names:
+            continue
+        missing.append(grant)
+    if missing:
+        raise ValueError(f"{source} does not advertise requested tools: {', '.join(sorted(missing))}")
 
 
 @dataclass

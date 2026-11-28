@@ -40,10 +40,10 @@ def test_shipped_tasks_grant_expected_tools(env, tmp_path):
 
 @pytest.mark.parametrize(("settings", "error"), [
     ({"allowed_tools": ["Read"]}, "allowed_tools"),
-    ({"tools": ["brave-search"]}, "mcp__"),
+    ({"tools": [" "]}, "tool name"),
     ({"tools": ["mcp__brave-search__"]}, "mcp__"),
     ({"tools": ["mcp__typo__search"]}, "typo"),
-    ({"runner": "pydantic_agent", "tools": ["Read"]}, "Read"),
+    ({"tools": ["mcp__local__bad grant"]}, "mcp__"),
 ])
 def test_invalid_task_tools_fail_at_config_load(tmp_path, settings, error):
     with pytest.raises(ValidationError, match=error):
@@ -58,6 +58,7 @@ def test_claude_configures_both_transports(monkeypatch, tmp_path):
 
     async def query(prompt, options):
         captured.append(options)
+        yield sdk.SystemMessage("init", {"tools": ["Read", "Bash", "mcp__remote__lookup", "mcp__local__list_records"]})
         yield sdk.AssistantMessage(content=[], model="test")
 
     monkeypatch.setattr(sdk, "query", query)
@@ -97,12 +98,13 @@ def test_pydantic_agent_configures_both_transports(monkeypatch):
     exposed_tools = []
 
     async def list_tools(server):
-        transports.append(server.client.transport)
+        if server.client.transport not in transports:
+            transports.append(server.client.transport)
         return [Tool(name=name, inputSchema={"type": "object"})
                 for name in ("lookup", "list_records", "delete_record")]
 
     class OfflineAgent:
-        def __init__(self, model, name, toolsets):
+        def __init__(self, model, name, toolsets, capabilities):
             self.toolsets = toolsets
 
         async def __aenter__(self):
@@ -134,3 +136,60 @@ def test_pydantic_agent_configures_both_transports(monkeypatch):
     assert local.command == "tool"
     assert list(local.args) == ["serve"]
     assert local.env["TOOL_KEY"] == "test-key"
+    task.tools = ["mcp__local-tool__typo"]
+    result = PydanticAgentRunner().run("demo", task, "", Path("."), tools)
+    assert not result.ok and "mcp__local-tool__typo" in result.error
+    assert result.num_turns is None
+
+
+def test_claude_rejects_grant_missing_from_session(monkeypatch, tmp_path):
+    sdk = pytest.importorskip("claude_agent_sdk")
+
+    async def query(prompt, options):
+        yield sdk.SystemMessage("init", {"tools": ["Read", "mcp__local__find"]})
+        yield sdk.ResultMessage("success", 1, 1, False, 1, "s", result="done")
+
+    monkeypatch.setattr(sdk, "query", query)
+    task = TaskConfig(title="Demo", runner="claude-agent", model="test",
+                      tools=["Read", "UnknownNative", "mcp__local__typo"])
+    result = ClaudeAgentRunner().run("demo", task, "", tmp_path, {"local": ToolConfig(command="tool")})
+    assert not result.ok
+    assert "UnknownNative" in result.error and "mcp__local__typo" in result.error
+
+
+def test_pydantic_uses_native_tools_from_model_profile(monkeypatch, tmp_path):
+    sdk = pytest.importorskip("pydantic_ai")
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+    from pydantic_ai.native_tools import WebSearchTool
+
+    class SearchModel(FunctionModel):
+        @classmethod
+        def supported_native_tools(cls):
+            return frozenset({WebSearchTool})
+
+    def respond(messages, info):
+        return ModelResponse(parts=[TextPart("done")])
+
+    model = SearchModel(respond)
+    monkeypatch.setattr("pydantic_ai.models.infer_model", lambda _: model)
+    real_agent = sdk.Agent
+    received = []
+
+    def agent(**kwargs):
+        received.extend(cap.tool for cap in kwargs["capabilities"])
+        return real_agent(**kwargs)
+
+    monkeypatch.setattr(sdk, "Agent", agent)
+    task = TaskConfig(title="Search", runner="pydantic_agent", model="test", tools=["web_search"],
+                      native_tool_options={"web_search": {"search_context_size": "high"}})
+    runner = PydanticAgentRunner()
+    result = runner.run("search", task, "hello", tmp_path, {})
+    assert result.ok, result.error
+    assert [tool.kind for tool in received] == ["web_search"]
+    assert received[0].search_context_size == "high"
+    for name in ("Read", "fake", "image_generation"):
+        task.tools = [name]
+        result = runner.run("search", task, "hello", tmp_path, {})
+        assert not result.ok and name in result.error
+    assert len(received) == 1

@@ -59,18 +59,17 @@ def capture_chars() -> int:
     return _capture_chars if _logfire is not None else 0
 
 
-def configure_agent_instrumentation(agent) -> None:
+def agent_instrumentation():
     if _logfire is None:
-        agent.instrument = False
-        return
+        return False
     try:
         from ..runners.pydantic_agent.instrumentation import ConversationInstrumentation
 
         instance = getattr(_logfire, "DEFAULT_LOGFIRE_INSTANCE", _logfire)
-        agent.instrument = ConversationInstrumentation(instance.config, capture_chars())
+        return ConversationInstrumentation(instance.config, capture_chars())
     except Exception as exc:  # noqa: BLE001 — tracing must not abort a model run
-        agent.instrument = False
         logger.warning("Pydantic AI tracing unavailable: %s", exc)
+        return False
 
 
 def _mirror_conversation_record(record: logging.LogRecord):

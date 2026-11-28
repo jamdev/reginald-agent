@@ -10,9 +10,9 @@ import asyncio
 from pathlib import Path
 
 from ...core.config import TaskConfig, ToolConfig
-from ...core.observability import configure_agent_instrumentation, logger
+from ...core.observability import agent_instrumentation, logger
 from ...domain.models import DoctorCheck
-from ..base import RunnerResult, check_sdk
+from ..base import RunnerResult, check_sdk, validate_tool_grants
 from .auth import check_pydantic_auth
 
 
@@ -42,12 +42,15 @@ class PydanticAgentRunner:
         usage = RunUsage()
 
         async def _run() -> str:
+            instrumentation = agent_instrumentation()
             toolsets = []
+            catalogs = {}
             mcp_operations = task.mcp_operations
             if mcp_operations:
                 from fastmcp.client.transports import StdioTransport, StreamableHttpTransport
                 from pydantic_ai.mcp import MCPToolset
 
+                trace_call = instrumentation.trace_mcp_call if instrumentation and instrumentation.limit else None
                 for name, operations in mcp_operations.items():
                     cfg = tools[name]
                     if cfg.transport == "http":
@@ -56,14 +59,37 @@ class PydanticAgentRunner:
                         transport = StdioTransport(
                             command=cfg.command, args=cfg.args, env=cfg.resolved_env(),
                         )
-                    server = MCPToolset(transport, id=name)
+                    server = MCPToolset(transport, id=name, process_tool_call=trace_call)
+                    catalogs[name] = server
                     if "*" not in operations:
                         server = server.filtered(lambda _ctx, tool, names=operations: tool.name in names)
                     toolsets.append(server.prefixed(name.replace("-", "_")))
 
-            agent = Agent(model=task.model, name=task.title, toolsets=toolsets)
-            configure_agent_instrumentation(agent)
+            model = task.model
+            capabilities = []
+            native = [name for name in task.tools if not name.startswith("mcp__")]
+            if native:
+                from pydantic import TypeAdapter
+                from pydantic_ai.capabilities import NativeTool
+                from pydantic_ai.models import infer_model
+
+                model = infer_model(task.model)
+                supported = {tool.kind: tool for tool in model.profile["supported_native_tools"]}
+                validate_tool_grants(task.model, native, supported)
+                for name in native:
+                    options = task.native_tool_options.get(name, {})
+                    if "kind" in options:
+                        raise ValueError(f"native_tool_options.{name}.kind is already set by the grant")
+                    tool = TypeAdapter(supported[name]).validate_python(options, extra="forbid")
+                    capabilities.append(NativeTool(tool))
+
+            agent = Agent(model=model, name=task.title, toolsets=toolsets, capabilities=capabilities)
+            agent.instrument = instrumentation
             async with agent:
+                for name, server in catalogs.items():
+                    prefix = f"mcp__{name}__"
+                    validate_tool_grants(name, (prefix + op for op in mcp_operations[name]),
+                                         (prefix + tool.name for tool in await server.list_tools()))
                 result = await agent.run(
                     prompt,
                     usage=usage,

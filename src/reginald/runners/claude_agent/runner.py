@@ -15,12 +15,13 @@ import json
 import os
 import time
 from collections import deque
+from contextlib import AsyncExitStack, aclosing
 from pathlib import Path
 
 from ...core.config import TaskConfig, ToolConfig
 from ...core.observability import agent_span, capture_chars, logger, set_run_usage
 from ...domain.models import DoctorCheck
-from ..base import RunnerResult, check_sdk
+from ..base import RunnerResult, check_sdk, validate_tool_grants
 from ..conversation import Conversation
 from ..tool_spans import ToolSpans
 from .auth import API_KEY_VAR, OAUTH_TOKEN_VAR, check_claude_auth, effective_credential
@@ -194,13 +195,20 @@ class ClaudeAgentRunner:
         started = time.monotonic()
 
         async def _run() -> None:
+            async with AsyncExitStack() as streams:
+                await _read_messages(streams)
+
+        async def _read_messages(streams: AsyncExitStack) -> None:
             nonlocal api_error_status, assistant_error, assistant_detail, subtype
             turns = 0
             turn_numbers: dict[str, int] = {}
             tool_turns: set[int] = set()
-            messages = query(prompt=prompt, options=options)
+            checked_tools = False
+            messages = await streams.enter_async_context(aclosing(query(prompt=prompt, options=options)))
             if options.include_partial_messages:
-                messages = trace_model_calls(messages, task.model, calls, conversation)
+                messages = await streams.enter_async_context(aclosing(
+                    trace_model_calls(messages, task.model, calls, conversation)
+                ))
             async for message in messages:
                 elapsed = time.monotonic() - started
                 if isinstance(message, AssistantMessage):
@@ -256,7 +264,6 @@ class ClaudeAgentRunner:
                     content = message.content if isinstance(message.content, list) else []
                     for block in content:
                         if isinstance(block, ToolResultBlock):
-                            calls.finish(block.tool_use_id, "failed" if block.is_error else "completed")
                             logger.debug(
                                 "[%s] tool result %s: %s", task_name,
                                 "ERROR" if block.is_error else "ok", _truncate(str(block.content)),
@@ -264,8 +271,12 @@ class ClaudeAgentRunner:
                             )
 
                 elif isinstance(message, SystemMessage):
-                    if message.subtype == "init" and isinstance(names := message.data.get("tools"), list):
-                        calls.names.update(name for name in names if isinstance(name, str))
+                    if message.subtype == "init":
+                        names = message.data.get("tools", [])
+                        grants = [*task.builtin_tools, *(t for t in task.tools if t.startswith("mcp__"))]
+                        validate_tool_grants("Claude", grants, names)
+                        checked_tools = True
+                        calls.names.update(names)
                     logger.debug("[%s] system/%s", task_name, message.subtype)
 
                 elif isinstance(message, ResultMessage):
@@ -282,6 +293,9 @@ class ClaudeAgentRunner:
                     if message.is_error:
                         errors = [_error_detail(s) for s in getattr(message, "errors", None) or []]
                         result.error = " | ".join(filter(None, errors)) or _error_detail(result.output)
+
+            if task.tools and result.ok and not checked_tools:
+                raise ValueError("Claude returned no startup tool inventory for the configured grants")
 
             logger.info(
                 "[%s] finished in %.0fs: %s turn(s), cost %s%s",

@@ -5,7 +5,7 @@
 # Ubuntu-specific quirks handled below:
 #   - needrestart prompts interactively mid-apt          -> NEEDRESTART_MODE=a
 #   - curl / gnupg are not preinstalled                  -> installed below
-#   - AppArmor blocks unprivileged user namespaces       -> profile for Electron
+#   - AppArmor restricts unprivileged user namespaces    -> Bubblewrap and Electron profiles
 #   - the server images ship with no swap                -> optional swapfile
 # Env knobs: SWAP_SIZE (default 2G), SKIP_SWAP=1, NODE_MAJOR (default 22).
 set -euo pipefail
@@ -110,7 +110,20 @@ fi
 # build-essential/python3-dev: sdist fallbacks when no wheel is published for the arch.
 apt-get install -y \
     git python3 python3-venv python3-dev build-essential \
-    sqlite3 curl ca-certificates gnupg
+    sqlite3 curl ca-certificates gnupg bubblewrap
+
+# Codex uses bwrap on PATH. Ubuntu's profile lets that binary set up loopback
+# inside its network namespace while keeping the host's userns restrictions.
+if [ "$ID" = ubuntu ] && [ "$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null)" = Y ]; then
+    echo ">>> Ubuntu AppArmor profile for the Codex sandbox"
+    apt-get install -y apparmor
+    profile=/etc/apparmor.d/bwrap-userns-restrict
+    if [ ! -f "$profile" ]; then
+        apt-get install -y apparmor-profiles
+        install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict "$profile"
+    fi
+    apparmor_parser -r "$profile"
+fi
 
 echo ">>> node ${NODE_MAJOR}+ (obsidian-headless + agent tooling)"
 node_major() {
@@ -124,7 +137,8 @@ node_major() {
 # pulls ~690 packages (eslint, X11, mesa, alacritty) onto a headless Pi. NodeSource
 # ships one self-contained package with npm included. Its setup_*.x script refuses
 # Ubuntu releases it predates, so use the distro-agnostic "nodistro" suite directly.
-if [ "$(node_major)" -lt "$NODE_MAJOR" ] || ! command -v npm >/dev/null 2>&1; then
+if [ "$(node_major)" -lt "$NODE_MAJOR" ] || ! command -v npm >/dev/null 2>&1 ||
+        ! node -e "require('node:sqlite')" >/dev/null 2>&1; then
     install -d -m 0755 /usr/share/keyrings
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
         | gpg --dearmor --yes -o /usr/share/keyrings/nodesource.gpg
@@ -133,6 +147,7 @@ if [ "$(node_major)" -lt "$NODE_MAJOR" ] || ! command -v npm >/dev/null 2>&1; th
     apt-get update
     apt-get install -y nodejs
 fi
+node -e "require('node:sqlite')" || { echo "Brave Search requires Node.js with built-in SQLite (22.13+ LTS)" >&2; exit 1; }
 echo "    node $(node -v), npm $(npm -v)"
 npm install -g obsidian-headless
 

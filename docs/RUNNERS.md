@@ -6,12 +6,12 @@ A runner is the harness Reginald uses to start the agent, pass it the rendered p
 
 All runners use the environment’s `logfire.capture_chars` limit for conversation excerpts. [Read the agent conversation](LOGGING.md#read-the-agent-conversation)
 
-Reginald validates these fields after merging the task definition and environment overlay. The seven shipped tasks explicitly select `claude-agent` and their existing Sonnet or Haiku model. To see the effective selections from the checkout, run `uv run reginald --env dev task list`. Each row shows the task, runner, model and tool grants.
+Reginald validates these fields after merging the task definition and environment overlay. The seven shipped tasks explicitly select `claude-agent` and their existing Sonnet or Haiku model. To see the effective selections from the checkout, run `uv run reginald --env dev task list`. Each row shows the task, runner, model and tool grants. [Choosing and validating tools](TOOLS.md)
 
 | Runner | How it runs the task | Work limit |
 | --- | --- | --- |
 | `claude-agent` | Claude Agent SDK with Claude Code tools in the vault | `max_turns` limits SDK turns (default 60) |
-| `pydantic_agent` | Pydantic AI with a provider-qualified model and selected MCP operations | `max_turns` limits model requests (default 60) |
+| `pydantic_agent` | Pydantic AI with the selected model’s native tools and MCP operations | `max_turns` limits model requests (default 60) |
 | `codex_agent` | Local Codex app-server with a fresh thread rooted at the vault | One Codex turn with a required positive `timeout_seconds` |
 
 Each example below is the body of a task definition in `config/tasks.d/`. The filename supplies its task key. Point `prompt_file` at a task note in the vault, or use the default prompt resolution. Reginald renders the prompt, runs the selected adapter, then commits file changes according to its Git settings. A final text answer alone creates no vault change or email. [Task and prompt configuration](USAGE.md#tasks-and-prompts)
@@ -75,7 +75,7 @@ Select a model available to the account. The Codex Python SDK starts its pinned 
 | `CodexReadOnly` | Codex's native tools, including sandboxed command execution, with read-only filesystem access. Use for inspection. |
 | `CodexWorkspaceWrite` | Native tools, including sandboxed commands and file edits, with write access to the vault workspace. Use for tasks that must produce a Git diff. |
 
-These are sandbox modes for the native tool set. The runner denies approval requests and disables native network access and web search. For an external operation, add its MCP grant, such as `mcp__brave-search__brave_web_search`. An MCP server runs with its own permissions. Granting a write operation to an MCP server can change external state even in a native read-only session. The runner checks for ambient MCP servers before starting a thread and fails if it finds any. Use the Reginald tool registry for these connections.
+These are sandbox modes for the native tool set. The runner denies approval requests and disables shell network access. Add `web_search` to the task’s tools to enable live hosted search alongside the native sandbox tools. Native search is disabled when omitted. [Search grants by runner](TOOLS.md#search-grants-by-runner) For an external operation, add its MCP grant, such as `mcp__brave-search__brave_web_search`. An MCP server runs with its own permissions. Granting a write operation to an MCP server can change external state even in a native read-only session. The runner checks for ambient MCP servers before starting a thread and fails if it finds any. Use the Reginald tool registry for these connections.
 
 A Codex turn may contain multiple model requests and tool calls. `timeout_seconds` covers SDK startup and execution. On expiry Reginald interrupts the worker, allows a short shutdown period, then terminates its process group before the run service rolls back the vault. When switching an existing Claude task to Codex in an environment overlay, set `max_turns: null` to clear the inherited limit, supply `timeout_seconds`, and replace the task’s `tools` list. [Codex SDK](https://developers.openai.com/codex/sdk/) and [app-server turn lifecycle](https://developers.openai.com/codex/app-server/)
 
@@ -92,6 +92,8 @@ sudo reginald doctor
 ```
 
 With a Codex task configured, look for green `Codex auth` and `module openai_codex` checks. These check local setup. A successful model response verifies account access to the selected model.
+
+On Ubuntu, also [verify the Codex sandbox](INSTALL.md#verify-the-codex-sandbox) before the first unattended run. This exercises native command execution as the service user. The same guide covers the Bubblewrap loopback error on older installations.
 
 ### Inspect a run
 

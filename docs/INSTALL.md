@@ -89,6 +89,8 @@ sudo bash "$HOME/reginald-install.sh" https://github.com/jamdev/reginald-agent.g
 
 The installer checks repository access before installing the runtime, clones the application into `/opt/reginald` and the vault into `/srv/vault/agentic-gc`, then installs the CLI wrapper and systemd units. You can rerun it to finish an interrupted install. It reuses existing clones. Use [Updating](#updating) to deploy a newer release.
 
+It also installs Bubblewrap for Codex. On Ubuntu with AppArmor enabled, it loads Ubuntu’s Bubblewrap profile and preserves the host’s user-namespace restrictions. Operators using Codex can [verify the sandbox](#verify-the-codex-sandbox) after configuring the vault.
+
 ### 5. Configure the host
 
 Copy the configuration templates and edit the shared and production settings. The loop preserves existing settings if you repeat this step.
@@ -215,11 +217,50 @@ To run that check immediately, start the service with `sudo systemctl start --no
 
 For an existing host, follow the [deployment guide](DEPLOY.md#updating). It covers [taking a database backup](DEPLOY.md#back-up-the-database-before-updating), [deploying and verifying a release](DEPLOY.md#deploy-the-update) and [returning to an earlier release](DEPLOY.md#rolling-back).
 
+### Verify the Codex sandbox
+
+On a configured host, this checks that Reginald’s service account can read the vault’s Git HEAD inside the Codex workspace sandbox. It uses the installed runtime and makes no model call. Success prints the current commit hash and exits with status 0.
+
+```bash
+cd /opt/reginald && sudo runuser -u reginald -- .venv/bin/python - <<'PY'
+import os
+import subprocess
+from pathlib import Path
+
+from codex_cli_bin import bundled_codex_path
+from reginald.core.config import load_config
+from reginald.runners.codex_agent.auth import credential_home
+
+vault = load_config("prod", config_dir=Path("config")).vault_path.resolve()
+subprocess.run(
+    [bundled_codex_path(), "sandbox", "-c", 'sandbox_mode="workspace-write"',
+     "--", "/usr/bin/git", "rev-parse", "--verify", "HEAD"],
+    cwd=vault, env={**os.environ, "CODEX_HOME": str(credential_home())}, check=True,
+)
+PY
+```
+
+If an existing Ubuntu host reports `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, Bubblewrap failed while setting up the sandbox’s network namespace. On an AppArmor-enabled host, install the system helper and load its packaged profile, then repeat the check above. The commands reuse an existing profile and fetch the extra profile on releases that package it separately. [Codex sandbox prerequisites](https://developers.openai.com/codex/concepts/sandboxing/#prerequisites)
+
+```bash
+(
+  set -e
+  sudo apt-get update
+  sudo apt-get install -y bubblewrap apparmor
+  profile=/etc/apparmor.d/bwrap-userns-restrict
+  if [ ! -f "$profile" ]; then
+    sudo apt-get install -y apparmor-profiles
+    sudo install -m 0644 /usr/share/apparmor/extra-profiles/bwrap-userns-restrict "$profile"
+  fi
+  sudo apparmor_parser -r "$profile"
+)
+```
+
 <a id="local-development-mac"></a>
 
 ## Local development
 
-On Linux, macOS or Windows using WSL2, [clone the Reginald application](#1-clone-the-reginald-application) and run the local setup commands from its directory. You need Git, Make, uv and Node.js in that environment. uv installs the Python version pinned in `.python-version`. [Install uv](https://docs.astral.sh/uv/getting-started/installation/) · [Install Node.js](https://nodejs.org/en/download)
+On Linux, macOS or Windows using WSL2, [clone the Reginald application](#1-clone-the-reginald-application) and run the local setup commands from its directory. You need Git, Make, uv and Node.js in that environment. Brave Search requires Node.js with built-in SQLite (Node.js 22.13 or later on an LTS line). uv installs the Python version pinned in `.python-version`. [Install uv](https://docs.astral.sh/uv/getting-started/installation/) · [Install Node.js](https://nodejs.org/en/download)
 
 ```bash
 make dev

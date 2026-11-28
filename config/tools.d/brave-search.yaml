@@ -2,5 +2,8 @@
 # Override individual fields under tools.<name> in dev.yaml or prod.yaml. List overrides replace the whole list.
 transport: stdio
 command: npx
-args: ["-y", "@brave/brave-search-mcp-server"]
+args:
+  - -y
+  - "--node-options=--import={package_uri}/services/brave_rate_limit.mjs"
+  - "@brave/brave-search-mcp-server@2.2.0"
 env: [BRAVE_API_KEY]

@@ -148,3 +148,79 @@ print('{"kind":"done"}')
                 for message in messages for p in message["parts"]] == ["task", "plan", "look", "echo", "file", "done"]
     else:
         assert "pydantic_ai.all_messages" not in attrs and "final_result" not in attrs
+
+
+@pytest.mark.parametrize("limit", [100, False])
+def test_brave_urls_on_codex_tool_span_and_conversation(tmp_path, monkeypatch, telemetry, limit):
+    from reginald.core import observability
+
+    monkeypatch.setattr(observability, "_capture_chars", limit)
+    urls = ["https://example.org/" + "long-path/" * 20 + "?page=2#dates", "https://example.org/b"]
+    mock_worker(monkeypatch, f"""
+import json, sys
+from types import SimpleNamespace
+from reginald.runners.codex_agent.worker import relay
+from pydantic import BaseModel
+class Result(BaseModel):
+    content: list[dict]
+content = [dict(type="text", text="No web results found")]
+for url in {urls!r}:
+    content.append(dict(type="text", text=json.dumps(dict(title="x" * 200 + "PRIVATE", url=url))))
+item = SimpleNamespace(type="mcpToolCall", server="brave-search", tool="brave_web_search", id="search",
+                       arguments={{"query": "dates"}}, result=Result(content=content), status="completed")
+payload = SimpleNamespace(item=SimpleNamespace(root=item))
+job = json.load(sys.stdin)
+for method in ("item/started", "item/completed"):
+    relay(method, payload, job["capture_chars"])
+print('{{"kind":"done"}}')
+""")
+    result = CodexAgentRunner().run("demo", task(), "", tmp_path, {})
+    assert result.ok, result.error
+    spans = {s.name: s.attributes for s in telemetry[1].get_finished_spans()
+             if s.attributes.get("logfire.span_type") == "span"}
+    tool = spans["execute_tool mcp__brave-search__brave_web_search"]
+    agent = spans["invoke_agent Demo"]
+    assert "PRIVATE" not in str(spans)
+    if limit:
+        assert json.loads(tool["tool.result_urls"]) == urls
+        parts = [p for m in json.loads(agent["pydantic_ai.all_messages"]) for p in m["parts"]]
+        response, = [p for p in parts if p["type"] == "tool_call_response"]
+        assert response["result_urls"] == urls
+        assert len(response["result"]) == limit
+    else:
+        assert "tool.result_urls" not in tool
+        assert "pydantic_ai.all_messages" not in agent
+
+
+@pytest.mark.parametrize("search", [False, True])
+def test_native_search_is_opt_in(tmp_path, monkeypatch, search):
+    mode = "live" if search else "disabled"
+    mock_worker(monkeypatch, f"""
+import json, sys
+job = json.load(sys.stdin)
+assert job["web_search"] == {mode!r}
+assert not job["write"]
+print('{{"kind":"done"}}')
+""")
+    grants = ["CodexReadOnly", "web_search"] if search else ["CodexReadOnly"]
+    result = CodexAgentRunner().run("demo", task(tools=grants), "", tmp_path, {})
+    assert result.ok, result.error
+
+
+def test_codex_checks_mcp_operations_on_active_thread():
+    from types import SimpleNamespace
+
+    pytest.importorskip("openai_codex")
+    from reginald.runners.codex_agent.worker import validate_mcp_operations
+
+    class Client:
+        def request(self, method, params, response_model):
+            assert method == "mcpServerStatus/list"
+            assert params == {"serverName": "local", "threadId": "t"}
+            server = SimpleNamespace(name="local", tools_error=None,
+                                     tools={"find": SimpleNamespace(name="find")})
+            return SimpleNamespace(data=[server], next_cursor=None)
+
+    validate_mcp_operations(Client(), "t", {"local": ["find", "*"]})
+    with pytest.raises(ValueError, match="mcp__local__typo"):
+        validate_mcp_operations(Client(), "t", {"local": ["typo", "*"]})

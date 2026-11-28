@@ -4,7 +4,7 @@ A **task** is a named job Reginald can do in the vault, such as answering a cont
 
 Each task brings together a runner and any steps it needs.
 
-- The **runner** is the code that gives the agent its rendered prompt, model and permitted tools, then returns the result to Reginald. A task selects one runner. [Runner guide](RUNNERS.md)
+- The **runner** is the code that gives the agent its rendered prompt, model and permitted tools, then returns the result to Reginald. A task selects one runner. [Runner guide](RUNNERS.md) · [Task tools](TOOLS.md)
 - A **step** is a named Python operation Reginald calls automatically at a point chosen by the task. The optional `pre` and `post` lists put steps before or after the agent. [Step guide](STEPS.md)
 
 ## How the action-edits task runs

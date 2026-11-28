@@ -6,7 +6,8 @@ import sys
 
 from pydantic import RootModel
 
-from ..conversation import excerpt
+from ..base import validate_tool_grants
+from ..conversation import BRAVE_WEB_SEARCH, brave_result_urls, excerpt
 from .auth import credential_home
 
 
@@ -27,6 +28,26 @@ def mcp_servers(operations, registry):
             server["enabled_tools"] = sorted(selected)
         servers[name] = server
     return servers
+
+
+def validate_mcp_operations(client, thread, operations):
+    from openai_codex.generated.v2_all import ListMcpServerStatusResponse
+
+    for name, selected in operations.items():
+        params = {"threadId": thread, "serverName": name}
+        advertised = set()
+        while True:
+            page = client.request("mcpServerStatus/list", params, response_model=ListMcpServerStatusResponse)
+            for server in page.data:
+                if server.name == name:
+                    if server.tools_error:
+                        raise ValueError(f"Cannot discover MCP tools on {name}: {server.tools_error}")
+                    advertised.update(tool.name for tool in server.tools.values())
+            if not page.next_cursor:
+                break
+            params["cursor"] = page.next_cursor
+        prefix = f"mcp__{name}__"
+        validate_tool_grants(name, (prefix + op for op in selected), (prefix + op for op in advertised))
 
 
 # SDK fields exposed by each tool item. Take the excerpt in the worker so
@@ -63,6 +84,8 @@ def relay(method, payload, limit: int = 0):
                 args_key, result_key = _TOOL_FIELDS[item.type]
                 arguments = getattr(item, args_key, None)
                 result = getattr(item, result_key) if result_key else None
+                if item.type == "mcpToolCall" and item.tool == BRAVE_WEB_SEARCH and result is not None:
+                    fields["result_urls"] = brave_result_urls(result.content)
                 if result is None:
                     result = getattr(item, "error", None)
                 for key, value in (("arguments", arguments), ("result", result)):
@@ -87,7 +110,7 @@ def execute(job):
     home.mkdir(parents=True, exist_ok=True, mode=0o700)
     key = os.environ.pop("OPENAI_API_KEY", None)
     overrides = [
-        'model_provider="openai"', 'approval_policy="never"', 'web_search="disabled"',
+        'model_provider="openai"', 'approval_policy="never"', f'web_search={json.dumps(job["web_search"])}',
         'shell_environment_policy.inherit="none"',
         f'shell_environment_policy.set.PATH={json.dumps(os.environ.get("PATH", os.defpath))}',
         'features.plugins=false', 'features.hooks=false',
@@ -127,6 +150,7 @@ def execute(job):
             policy = {"type": "workspaceWrite", "writableRoots": [vault], "networkAccess": False,
                       "excludeSlashTmp": True, "excludeTmpdirEnvVar": True}
         thread = started.thread.id
+        validate_mcp_operations(client, thread, job["operations"])
         turn = client.turn_start(thread, job["prompt"], {"sandboxPolicy": policy}).turn.id
         try:
             while True:

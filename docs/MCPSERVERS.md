@@ -10,6 +10,14 @@ The research task shows how three pieces fit together.
 2. **The server describes the tool.** Through MCP's `tools/list`, the runner can discover each operation's name, plain-English description and input schema. The model uses those details to choose an operation and supply its arguments. The runner calls the server and returns the result to the model. Native tools such as Claude's `Read` and `Grep` get their definitions from the runner's SDK. [MCP tool discovery and calls](https://modelcontextprotocol.io/specification/2025-11-25/server/tools) · [Runner guide](RUNNERS.md)
 3. **The task prompt gives the agent a reason to use it.** For a custom tool, put its purpose, inputs and expected result in the server's tool definition. Put team policy in the task's Markdown prompt. For example, a research prompt could say “When a cited source has moved, search for its new location and open the regulator's page before updating the citation.” The agent chooses whether to call a granted tool. Use a task step when Reginald must perform an operation on every applicable run. [Tasks and prompts](USAGE.md#tasks-and-prompts) · [Task steps](STEPS.md)
 
+## Brave Search rate limits
+
+Claude, Codex and Pydantic AI launch the same Brave MCP server. Its HTTP requests start at one per second until Brave reports the plan’s burst rate. The tool then spaces requests at that rate and checks the remaining allowance and reset time for each quota window. A monthly limit of zero means the plan has unlimited monthly requests. [Brave’s rate-limit guide](https://api-dashboard.search.brave.com/documentation/guides/rate-limiting)
+
+After HTTP 429, the tool retries up to three times, waiting at least one, two and four seconds respectively and longer when an exhausted window requires it. A cooldown longer than 30 seconds returns a tool error with the remaining wait. Calls using the same API key and local OS account share the cooldown across runner processes and restarts. The state lives in `~/.local/state/reginald/brave-rate-limits.sqlite` and contains a hash of the key and pacing times. Other hosts using the same Brave subscription have their own local state.
+
+The shipped connection pins the Brave server version and preloads the limiter through its Node.js arguments. Keep the shipped `args` when overriding the path to `npx`. The `{package_uri}` placeholder resolves to the installed Reginald package’s file URI. [Brave server definition](../config/tools.d/brave-search.yaml)
+
 ## Add another MCP server
 
 All three runners support local stdio processes and Streamable HTTP endpoints. To add a compatible server, register its connection and grant its operations to the tasks that need them. The following example gives the development `source-verification` task access to Microsoft Learn search so it can locate a moved Microsoft documentation page.
@@ -47,7 +55,7 @@ After local development setup, run this from the repository root. The `source-ve
 uv run reginald --env dev task list
 ```
 
-This checks the merged configuration. It catches an unknown server name, but an operation name can be misspelled and still pass. A task dry run renders the prompt and skips the agent. To verify actual use, inspect the next development run that needs the operation for a tool call and its result. The journal records Claude tool names when per-turn logging is enabled. Debug logs include a summary of the result. [Inspect tool calls](LOGGING.md#find-individual-tool-calls-in-logfire)
+Listing tasks checks the merged configuration and registered server names. A task dry run renders the prompt and skips the agent. At agent startup all three runners validate the selected operations against the connected servers. A missing operation fails the run. [Tool validation](TOOLS.md#mcp-grants-and-validation) To verify actual use, inspect the next development run that needs the operation for a tool call and its result. The journal records Claude tool names when per-turn logging is enabled. Debug logs include a summary of the result. [Inspect tool calls](LOGGING.md#find-individual-tool-calls-in-logfire)
 
 ## Proposed read-only vault server
 

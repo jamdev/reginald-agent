@@ -1,6 +1,31 @@
 """Bounded OpenTelemetry message parts for SDKs that expose their own event stream."""
 
+import json
+
 from pydantic_core import PydanticSerializationError, to_json
+
+BRAVE_WEB_SEARCH = "brave_web_search"
+
+
+def brave_result_urls(content: object) -> list[str]:
+    """Read hit URLs from MCP text blocks or the decoded hits Pydantic AI returns."""
+    urls = []
+    pending = [content]
+    while pending:
+        hit = pending.pop()
+        if isinstance(hit, str):
+            try:
+                hit = json.loads(hit)
+            except (ValueError, RecursionError):
+                continue  # Empty searches and errors can return plain text.
+        if isinstance(hit, list):
+            pending.extend(reversed(hit))
+        elif isinstance(hit, dict):
+            if hit.get("type") == "text":
+                pending.append(hit.get("text"))
+            elif isinstance(url := hit.get("url"), str) and url.lower().startswith(("https://", "http://")):
+                urls.append(url)
+    return urls
 
 
 def excerpt(value, limit: int) -> str:

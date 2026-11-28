@@ -110,10 +110,14 @@ class ToolConfig(BaseModel):
         return {name: os.environ[name] for name in self.env if name in os.environ}
 
     def for_vault(self, vault_path: Path) -> Self:
-        """Bind whole-argument placeholders for a local MCP process."""
+        """Bind paths used by local MCP processes to this installation and vault."""
+        package_uri = Path(__file__).resolve().parents[1].as_uri()
         return self.model_copy(update={
             "command": sys.executable if self.command == "{python}" else self.command,
-            "args": [str(vault_path.resolve()) if arg == "{vault_path}" else arg for arg in self.args],
+            "args": [
+                str(vault_path.resolve()) if arg == "{vault_path}" else arg.replace("{package_uri}", package_uri)
+                for arg in self.args
+            ],
         })
 
 
@@ -122,6 +126,7 @@ class TaskConfig(BaseModel):
     runner: Literal["claude-agent", "pydantic_agent", "codex_agent"]
     model: str = Field(min_length=1, pattern=r"^\S+$")
     tools: list[str] = Field(default_factory=list)
+    native_tool_options: dict[str, dict[str, Any]] = Field(default_factory=dict)
     max_turns: int | None = Field(default=None, gt=0)
     timeout_seconds: int | None = Field(default=None, gt=0)
     prompt_file: str | None = None  # relative to vault; default resolution applies
@@ -165,13 +170,18 @@ class TaskConfig(BaseModel):
                     r"[\w.-]+|\*", operation, re.ASCII
                 ):
                     continue
-            elif re.fullmatch(r"[A-Z][A-Za-z0-9_]*(?:\(.*\))?", tool):
-                if self.runner != "claude-agent":
-                    raise ValueError(f"{tool!r} is a Claude built-in and requires claude-agent")
-                continue
-            raise ValueError(
-                f"Invalid tool {tool!r} for {self.runner}. Use a supported native tool or mcp__<server>__<operation>."
-            )
+                raise ValueError(f"Invalid MCP grant {tool!r}. Use mcp__<server>__<operation>.")
+            if not tool.strip() or tool != tool.strip():
+                raise ValueError(f"Invalid empty or padded tool name {tool!r}")
+            if self.runner == "codex_agent" and tool != "web_search":
+                raise ValueError(f"Codex supplies its sandbox's native set. Only web_search can be "
+                                 f"selected separately. Unknown grant {tool!r}.")
+        if self.native_tool_options:
+            if self.runner != "pydantic_agent":
+                raise ValueError("native_tool_options applies only to Pydantic AI native tools")
+            for name in self.native_tool_options:
+                if name.startswith("mcp__") or name not in self.tools:
+                    raise ValueError(f"native_tool_options requires a native grant for {name!r}")
         return self
 
     @property

@@ -194,6 +194,7 @@ Some notes on information security:
 
 - [Configure Claude, Pydantic AI and Codex task runners](docs/RUNNERS.md)
 
+- [Choose native tools, Brave Search and task grants](docs/TOOLS.md)
 - [Add MCP servers and grant tools to tasks](docs/MCPSERVERS.md)
 
 - [Inspect a run in the journal or Logfire](docs/LOGGING.md)

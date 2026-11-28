@@ -151,7 +151,7 @@ The config *directory* is `$REGINALD_CONFIG_DIR` if set, else `<repo>/config`, e
 | `email.reply_to` | `null` | Optional reply-to. |
 | `email.allowlist` | `[]` | **Empty means no restriction.** Non-empty means only these addresses receive mail; everyone else is marked failed with a note. |
 | `logfire.enabled` | `false` | Send traces, logs, task completions and usage metrics. Production uses `LOGFIRE_TOKEN` from the host environment. |
-| `logfire.capture_chars` | `100` | Maximum characters per conversation field exported by any runner. Use a positive integer or YAML `false` to disable content capture and keep operational telemetry. The development template sets `1000`. [Inspect the conversation](LOGGING.md#read-the-agent-conversation) |
+| `logfire.capture_chars` | `100` | Maximum characters per conversation excerpt. With a positive limit, all runners also record complete Brave Search result URLs. YAML `false` disables content capture, including URLs. The development template sets `1000`. [Inspect tool calls](LOGGING.md#find-individual-tool-calls-in-logfire) |
 | `logfire.environment` | `dev` | Environment tag. |
 | `logging.level` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`. Overridden by `$REGINALD_LOG_LEVEL`. |
 | `logging.agent_turns` | `true` | One `INFO` line per agent tool call. Turn this off and a run logs only start and finish. |
@@ -217,7 +217,7 @@ Point `vault_path` at a **scratch clone**, not your real vault. Runs commit loca
 
 ## Tasks and prompts
 
-Every task selects a runner and model and can name steps to run before and after the agent. The task guide follows a complete example. The runner reference covers tool grants, limits and authentication. [Task guide](TASKS.md) · [Runner reference](RUNNERS.md)
+Every task selects a runner and model and can name steps to run before and after the agent. The task guide follows a complete example. The runner reference covers tool grants, limits and authentication. [Task guide](TASKS.md) · [Runner reference](RUNNERS.md) · [Tool grants and search choices](TOOLS.md)
 
 The file `config/tasks.d/research-new-developments.yaml` registers the `research-new-developments` task for both environments.
 
@@ -233,14 +233,7 @@ post: [normalize-frontmatter, backfill-uuids, set-publish]
 
 List each tool the task may call once under `tools`. Claude can choose its built-in `WebSearch` or Brave's `brave_web_search` in this example. Reginald connects the Brave server and pre-approves that operation. Calls that would require a permission prompt are denied immediately. Research and tracker updates also list `Agent` so Claude can delegate parts of those tasks. [Claude Agent SDK permissions](https://code.claude.com/docs/en/agent-sdk/permissions)
 
-Use `mcp__<server>__<operation>` for an external tool. Use `mcp__<server>__*` only when the task should have every operation on that server. `config/tools.d/brave-search.yaml` supplies the connection shared by tasks that select Brave.
-
-```yaml
-transport: stdio                      # stdio | http
-command: npx
-args: ["-y", "@brave/brave-search-mcp-server"]
-env: [BRAVE_API_KEY]                  # names materialised from the process env
-```
+Use `mcp__<server>__<operation>` for an external tool. Use `mcp__<server>__*` only when the task should have every operation on that server. The shipped Brave connection paces requests across runners using the same key on one host and retries temporary rate limits. [Brave connection](../config/tools.d/brave-search.yaml) · [Brave Search rate limits](MCPSERVERS.md#brave-search-rate-limits)
 
 All three runners support local stdio servers and remote Streamable HTTP servers. For an HTTP server, set `transport: http` and supply its absolute HTTP or HTTPS endpoint in `url`. The stdio `env` list supplies environment variables to a local child process. [Add an MCP server and verify a task grant](MCPSERVERS.md#add-another-mcp-server)
 

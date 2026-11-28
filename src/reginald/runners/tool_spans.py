@@ -15,7 +15,7 @@ class ToolSpans:
         self.parent = copy_context()
         self.names = set(names)
         self.active = {}
-        self.seen = set()
+        self.names_by_id: dict[str, str] = {}
 
     def set_definitions(self, current) -> None:
         if current is not None and self.names:
@@ -23,9 +23,9 @@ class ToolSpans:
             current.set_attribute("gen_ai.tool.definitions", definitions)
 
     def start(self, call_id: str, name: str, *, turn: int) -> None:
-        if call_id in self.seen:
+        if call_id in self.names_by_id:
             return
-        self.seen.add(call_id)
+        self.names_by_id[call_id] = name
         self.names.add(name)
         context = self.parent.copy()
         stack = ExitStack()
@@ -35,11 +35,13 @@ class ToolSpans:
         current = context.run(stack.enter_context, scope)
         self.active[call_id] = (context, stack, current)
 
-    def finish(self, call_id: str, status: str | None) -> None:
+    def finish(self, call_id: str, status: str | None, *, result_urls: list[str] | None = None) -> None:
         active = self.active.pop(call_id, None)
         if active:
             context, stack, current = active
             try:
+                if current is not None and result_urls:
+                    current.set_attribute("tool.result_urls", result_urls)
                 if current is not None and status:
                     current.set_attribute("tool.status", status)
                     if status in {"failed", "declined", "interrupted"}:
